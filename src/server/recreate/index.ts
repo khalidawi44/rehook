@@ -83,9 +83,12 @@ function kick() {
     });
 }
 
-// Au démarrage, les tâches interrompues repartent.
-db.prepare("UPDATE jobs SET status = 'queued', step = 'En attente' WHERE status = 'running'").run();
+// Au démarrage, les tâches interrompues repartent ; et toutes les 30 s on vérifie
+// qu'aucune tâche en attente n'est oubliée.
+const resumed = db.prepare("UPDATE jobs SET status = 'queued', step = 'En attente', progress = 0 WHERE status = 'running'").run();
+if (Number(resumed.changes)) console.log(`[niche] ${resumed.changes} tâche(s) interrompue(s) remise(s) en file`);
 setTimeout(kick, 1000);
+setInterval(kick, 30_000);
 
 async function runJob(job: JobRow) {
   const opts = JSON.parse(job.options) as JobOptions;
