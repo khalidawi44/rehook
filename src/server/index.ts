@@ -11,7 +11,13 @@ import { listAlerts, markSeen, unseenCount } from "./alerts.js";
 import { listPacks, loadPack } from "./packs/index.js";
 import { deleteCapture, listCaptures, saveCapture } from "./captures.js";
 import { ensureSourceFile } from "./recreate/analyze.js";
-import { getMontage, listMontages, montageSources, startMontage, type MontageRequest } from "./montage.js";
+import { deleteMusic, getMontage, listMontages, listMusic, montageSources, saveMusic, startMontage, transcribeMontage, type MontageRequest } from "./montage.js";
+import { ensureSourceFile as ensureSource } from "./recreate/analyze.js";
+import { FFMPEG } from "./media.js";
+import { execFile as execFileCb } from "node:child_process";
+import { promisify as promisifyFn } from "node:util";
+import { CAPTURES_DIR, listCaptures as listCapturesForExtract } from "./captures.js";
+import { RENDERS_DIR as RENDERS } from "./paths.js";
 import { fetchTikTokProfile } from "./providers/tiktok-page.js";
 import { removeDemo, seedDemo } from "./providers/demo.js";
 import { createJob, deleteJob, getJob, listJobs, retryJob } from "./recreate/index.js";
@@ -293,33 +299,117 @@ const ClipSchema = z.object({
   mute: z.boolean().optional(),
   volume: z.number().min(0).max(4).optional(),
   speed: z.number().min(0.25).max(4).optional(),
+  effects: z.array(z.enum(["zoom-in", "zoom-out", "bw", "warm", "cold", "vignette", "mirror", "sharpen", "punch", "fade-in", "fade-out", "blur-bg"])).optional(),
+});
+const WordSchema = z.object({ text: z.string(), start: z.number(), end: z.number() });
+const CueSchema = z.object({ id: z.string(), start: z.number(), end: z.number(), text: z.string().max(500), words: z.array(WordSchema) });
+const StyleSchema = z.object({
+  mode: z.enum(["karaoke", "block"]).optional(),
+  position: z.enum(["bottom", "center", "top"]).optional(),
+  size: z.number().min(20).max(300).optional(),
+  font: z.string().max(60).optional(),
+  color: z.string().max(9).optional(),
+  highlight: z.string().max(9).optional(),
+  outline: z.string().max(9).optional(),
+  box: z.boolean().optional(),
+  uppercase: z.boolean().optional(),
+  maxWords: z.number().min(1).max(12).optional(),
+});
+const TextSchema = z.object({
+  id: z.string(),
+  text: z.string().max(300),
+  start: z.number().min(0),
+  end: z.number().min(0),
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  size: z.number().min(10).max(400),
+  color: z.string().max(9),
+  font: z.string().max(60),
+  animation: z.enum(["none", "pop", "fade"]),
 });
 const MontageSchema = z.object({
   name: z.string().max(80).optional(),
-  clips: z.array(ClipSchema).min(1).max(60),
+  clips: z.array(ClipSchema).min(1).max(80),
   width: z.number().min(16).max(4096),
   height: z.number().min(16).max(4096),
   fit: z.enum(["cover", "contain"]).default("cover"),
   fps: z.number().min(10).max(60).optional(),
-  music: z.string().nullable().optional(),
-  musicVolume: z.number().min(0).max(2).optional(),
+  music: z
+    .object({ file: z.string(), volume: z.number().min(0).max(2).optional(), startS: z.number().min(0).optional(), fadeInS: z.number().min(0).max(10).optional(), fadeOutS: z.number().min(0).max(10).optional(), duck: z.boolean().optional() })
+    .nullable()
+    .optional(),
   fadeS: z.number().min(0).max(5).optional(),
+  transition: z.object({ type: z.string().max(30), durationS: z.number().min(0).max(2) }).nullable().optional(),
+  subtitles: z.object({ cues: z.array(CueSchema).max(2000), style: StyleSchema }).nullable().optional(),
+  texts: z.array(TextSchema).max(200).optional(),
 });
+function parseMontage(body: unknown): MontageRequest | string {
+  const parsed = MontageSchema.safeParse(body);
+  if (!parsed.success) return "Montage invalide : " + parsed.error.issues.map((i) => i.path.join(".") + " " + i.message).join(", ");
+  if (parsed.data.clips.some((c) => c.outS <= c.inS)) return "Un clip a une fin avant son début";
+  return parsed.data as MontageRequest;
+}
 app.post(
   "/api/montage",
   asyncRoute(async (req, res) => {
-    const parsed = MontageSchema.safeParse(req.body);
-    if (!parsed.success) return void res.status(400).json({ error: "Montage invalide : " + parsed.error.issues.map((i) => i.path.join(".") + " " + i.message).join(", ") });
-    if (parsed.data.clips.some((c) => c.outS <= c.inS)) return void res.status(400).json({ error: "Un clip a une fin avant son début" });
-    res.json(await startMontage(parsed.data as MontageRequest));
+    const r = parseMontage(req.body);
+    if (typeof r === "string") return void res.status(400).json({ error: r });
+    res.json(await startMontage(r));
+  }),
+);
+app.post(
+  "/api/montage/transcribe",
+  asyncRoute(async (req, res) => {
+    const r = parseMontage(req.body?.montage);
+    if (typeof r === "string") return void res.status(400).json({ error: r });
+    res.json(await transcribeMontage(r, typeof req.body?.language === "string" ? req.body.language : undefined, (l) => console.log("[niche]", l)));
   }),
 );
 
-app.get("/api/music", (_req, res) => {
-  const dir = path.join(PUBLIC_DIR, "music");
-  const files = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => /\.(mp3|wav|m4a|aac|ogg)$/i.test(f)) : [];
-  res.json(files);
-});
+// ---- Musique -----------------------------------------------------------------
+
+app.get("/api/music", asyncRoute(async (_req, res) => void res.json(await listMusic())));
+app.post(
+  "/api/music",
+  express.raw({ type: ["audio/*", "video/*", "application/octet-stream"], limit: "500mb" }),
+  asyncRoute(async (req, res) => {
+    const body = req.body as Buffer;
+    if (!body?.length) return void res.status(400).json({ error: "Fichier vide" });
+    res.json(await saveMusic(body, String(req.query.name ?? "")));
+  }),
+);
+app.delete("/api/music/:file", (req, res) => res.json({ ok: deleteMusic(String(req.params.file)) }));
+/** Extrait la bande son d'un clip (vidéo relevée, enregistrement, rendu) vers la bibliothèque musique. */
+app.post(
+  "/api/music/extract",
+  asyncRoute(async (req, res) => {
+    const src = req.body?.source as { kind: string; id: string } | undefined;
+    if (!src?.kind || !src?.id) return void res.status(400).json({ error: "Source manquante" });
+    let file: string | null = null;
+    if (src.kind === "video") {
+      const v = db.prepare("SELECT * FROM videos WHERE id = ?").get(Number(src.id)) as VideoRow | undefined;
+      file = v ? await ensureSource(v) : null;
+    } else if (src.kind === "capture") {
+      const c = listCapturesForExtract().find((x) => x.id === src.id);
+      file = c ? path.join(CAPTURES_DIR, c.file) : null;
+    } else if (src.kind === "render") {
+      file = path.join(RENDERS, `niche-${Number(src.id)}.mp4`);
+    }
+    if (!file || !fs.existsSync(file)) return void res.status(404).json({ error: "Fichier source introuvable" });
+    const inS = Number(req.body?.inS ?? 0);
+    const outS = Number(req.body?.outS ?? 0);
+    const args = ["-hide_banner", "-loglevel", "error", "-y", "-i", file, "-vn"];
+    if (inS > 0) args.push("-ss", String(inS));
+    if (outS > inS) args.push("-to", String(outS));
+    const tmp = path.join(RENDERS, `extract-${Date.now()}.mp3`);
+    await promisifyFn(execFileCb)(FFMPEG, [...args, "-c:a", "libmp3lame", "-b:a", "192k", tmp]);
+    try {
+      res.json(await saveMusic(fs.readFileSync(tmp), String(req.body?.name ?? "son extrait")));
+    } finally {
+      fs.rmSync(tmp, { force: true });
+    }
+  }),
+);
 
 // ---- Fichiers ----------------------------------------------------------------
 

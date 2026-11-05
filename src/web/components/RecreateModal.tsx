@@ -24,7 +24,7 @@ export const RecreateModal: React.FC<{ card: VideoCard; onClose: () => void; onQ
     music: null,
     backgroundCapture: null,
   });
-  const [music, setMusic] = useState<string[]>([]);
+  const [music, setMusic] = useState<{ file: string; name: string }[]>([]);
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -107,8 +107,8 @@ export const RecreateModal: React.FC<{ card: VideoCard; onClose: () => void; onQ
           <select value={opts.music ?? ""} onChange={(e) => set("music", e.target.value || null)} className={inputCls}>
             <option value="">Aucune</option>
             {music.map((m) => (
-              <option key={m} value={m}>
-                {m}
+              <option key={m.file} value={m.file}>
+                {m.name}
               </option>
             ))}
           </select>

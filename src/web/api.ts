@@ -74,7 +74,38 @@ export type Alert = {
 export type Capture = { id: string; name: string; file: string; url: string; durationS: number; width: number; height: number; createdAt: number };
 
 export type ClipSource = { kind: "video" | "capture" | "render"; id: string };
-export type Clip = { source: ClipSource; inS: number; outS: number; mute?: boolean; volume?: number; speed?: number };
+export type ClipEffect = "zoom-in" | "zoom-out" | "bw" | "warm" | "cold" | "vignette" | "mirror" | "sharpen" | "punch" | "fade-in" | "fade-out" | "blur-bg";
+export type Clip = { source: ClipSource; inS: number; outS: number; mute?: boolean; volume?: number; speed?: number; effects?: ClipEffect[] };
+export type Word = { text: string; start: number; end: number };
+export type Cue = { id: string; start: number; end: number; text: string; words: Word[] };
+export type SubtitleStyle = {
+  mode: "karaoke" | "block";
+  position: "bottom" | "center" | "top";
+  size: number;
+  font: string;
+  color: string;
+  highlight: string;
+  outline: string;
+  box: boolean;
+  uppercase: boolean;
+  maxWords: number;
+};
+export type TextItem = { id: string; text: string; start: number; end: number; x: number; y: number; size: number; color: string; font: string; animation: "none" | "pop" | "fade" };
+export type MusicTrack = { file: string; name: string; durationS: number | null; url: string };
+export type MusicOptions = { file: string; volume?: number; startS?: number; fadeInS?: number; fadeOutS?: number; duck?: boolean };
+export type MontageRequest = {
+  name?: string;
+  clips: Clip[];
+  width: number;
+  height: number;
+  fit: "cover" | "contain";
+  fps?: number;
+  music?: MusicOptions | null;
+  fadeS?: number;
+  transition?: { type: string; durationS: number } | null;
+  subtitles?: { cues: Cue[]; style: Partial<SubtitleStyle> } | null;
+  texts?: TextItem[];
+};
 export type MontageSources = {
   videos: { id: string; name: string; durationS: number | null; cover: string | null; url: string }[];
   captures: { id: string; name: string; durationS: number; url: string }[];
@@ -191,7 +222,16 @@ export const api = {
   job: (id: number) => req<Job>(`/api/jobs/${id}`),
   retryJob: (id: number, options: JobOptions) => req<Job>(`/api/jobs/${id}/retry`, { method: "POST", body: JSON.stringify(options) }),
   deleteJob: (id: number) => req<{ ok: boolean }>(`/api/jobs/${id}`, { method: "DELETE" }),
-  music: () => req<string[]>("/api/music"),
+  music: () => req<MusicTrack[]>("/api/music"),
+  uploadMusic: async (blob: Blob, name: string) => {
+    const r = await fetch(`/api/music?name=${encodeURIComponent(name)}`, { method: "POST", headers: { "Content-Type": blob.type || "application/octet-stream" }, body: blob });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error((body as { error?: string }).error ?? `Erreur ${r.status}`);
+    return body as { file: string };
+  },
+  deleteMusic: (file: string) => req<{ ok: boolean }>(`/api/music/${encodeURIComponent(file)}`, { method: "DELETE" }),
+  extractMusic: (source: ClipSource, name: string, inS?: number, outS?: number) => req<{ file: string }>("/api/music/extract", { method: "POST", body: JSON.stringify({ source, name, inS, outS }) }),
+  transcribeMontage: (montage: MontageRequest, language?: string) => req<{ cues: Cue[]; provider: string; language?: string }>("/api/montage/transcribe", { method: "POST", body: JSON.stringify({ montage, language }) }),
   alerts: () => req<Alert[]>("/api/alerts"),
   alertsSeen: (id?: number) => req<{ unseen: number }>("/api/alerts/seen", { method: "POST", body: JSON.stringify({ id }) }),
   watchNow: () => req<{ started: boolean }>("/api/watch", { method: "POST", body: "{}" }),
@@ -207,8 +247,7 @@ export const api = {
   montageSources: () => req<MontageSources>("/api/montage/sources"),
   montages: () => req<MontageJob[]>("/api/montage"),
   montage: (id: string) => req<MontageJob>(`/api/montage/${id}`),
-  startMontage: (body: { name?: string; clips: Clip[]; width: number; height: number; fit: "cover" | "contain"; fps?: number; music?: string | null; musicVolume?: number; fadeS?: number }) =>
-    req<MontageJob>("/api/montage", { method: "POST", body: JSON.stringify(body) }),
+  startMontage: (body: MontageRequest) => req<MontageJob>("/api/montage", { method: "POST", body: JSON.stringify(body) }),
   loadPack: (name: string) => req<{ accounts: number; videos: number; errors: string[] }>(`/api/packs/${name}`, { method: "POST", body: "{}" }),
 };
 

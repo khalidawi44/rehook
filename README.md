@@ -83,7 +83,13 @@ La fiche d'une vidéo (clic sur une carte, bouton « Voir » d'une alerte) lit l
 
 ## Montage
 
-Onglet ✂️ Montage : un chutier (vidéos relevées, enregistrements et fichiers importés depuis le PC, recréations), une timeline et un aperçu qui enchaîne les clips. Par clip : début et fin (au curseur avec « Début ici » et « Fin ici », ou en secondes), coupe au curseur, vitesse x0,5 à x2, volume, muet, ordre, duplication, suppression. Export MP4 (ffmpeg embarqué) au format choisi (1080x1920, 1080x1080, 1920x1080 ou libre), recadrage « remplir » ou « tout voir », musique de fond avec volume, fondu de début et de fin ; la progression s'affiche et le fichier se lit et se télécharge dans la colonne Exports (`data/renders/montage-*.mp4`).
+Onglet ✂️ Montage : un chutier (vidéos relevées, enregistrements et fichiers importés depuis le PC, recréations, musiques), une timeline et un aperçu qui enchaîne les clips avec les sous-titres et textes. Cinq outils :
+
+- **Clip et effets** : début et fin (au curseur avec « Début ici » et « Fin ici », ou en secondes), coupe au curseur, vitesse x0,5 à x2, volume, son coupé, ordre, duplication, suppression, « extraire le son vers la musique ». Effets par clip : zoom avant ou arrière, punchy, noir et blanc, chaud, froid, vignette, netteté, miroir, fond flou, fondu entrée et sortie.
+- **Musique** : import de fichiers (mp3, wav, m4a…, convertis en mp3 dans `data/public/music/`) ou son extrait d'un clip ; piste choisie, volume, départ dans la musique, fondus, et baisse automatique quand on parle (compresseur piloté par la voix).
+- **Sous-titres** : génération automatique par transcription de la bande son du montage (Whisper en ligne si `OPENAI_API_KEY`, sinon Whisper local via transformers.js, modèle téléchargé une fois dans `data/models/`), liste modifiable (texte, début, fin), ajout au curseur, style karaoké mot à mot ou bloc, position, taille, couleurs, majuscules, fond. Incrustés à l'export (libass, police Anton).
+- **Textes** : titres et mentions avec moment, taille, couleur, position et animation (pop, fondu).
+- **Export** : format (1080x1920, 1080x1080, 1920x1080 ou libre), recadrage « remplir » ou « tout voir », transitions entre clips (fondu, fondu au noir, glissements, volets, cercle, pixels…), fondu global ; progression, lecture et téléchargement (`data/renders/montage-*.mp4`).
 
 ## Enregistreur d'écran
 
