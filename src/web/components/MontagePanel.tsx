@@ -252,7 +252,7 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
   return (
     <div className="my-4 grid gap-4 xl:grid-cols-[300px_1fr_280px]">
       {/* Chutier */}
-      <div className="space-y-2 rounded-xl border border-zinc-800 p-3">
+      <div className="min-w-0 space-y-2 rounded-xl border border-zinc-800 p-3">
         <div className="flex gap-1 text-xs">
           {(["videos", "captures", "renders"] as const).map((t) => (
             <button key={t} onClick={() => setLibTab(t)} className={`rounded-lg px-2 py-1 ${libTab === t ? "bg-zinc-100 text-black" : "border border-zinc-700 hover:bg-zinc-800"}`}>
@@ -288,7 +288,7 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
       </div>
 
       {/* Aperçu + timeline */}
-      <div className="space-y-3">
+      <div className="min-w-0 space-y-3">
         <div className="rounded-xl border border-zinc-800 bg-black p-2">
           <video ref={videoRef} playsInline className="mx-auto max-h-[420px] rounded" style={{ aspectRatio: `${out.w} / ${out.h}`, objectFit: fit }} />
         </div>
@@ -376,7 +376,7 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
       </div>
 
       {/* Export */}
-      <div className="space-y-3">
+      <div className="min-w-0 space-y-3">
         <div className="rounded-xl border border-zinc-800 p-3">
           <div className="mb-2 text-sm font-medium">Export</div>
           <div className="flex flex-wrap gap-1">
