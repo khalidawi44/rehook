@@ -22,6 +22,11 @@ export const VideoCard: React.FC<{
           {card.source === "demo" ? <span className="rounded-md bg-zinc-700/90 px-2 py-0.5 text-xs text-zinc-200">démo</span> : null}
         </div>
         {card.durationS ? <span className="absolute bottom-2 right-2 rounded-md bg-black/70 px-1.5 py-0.5 text-xs">{fmtDuration(card.durationS)}</span> : null}
+        {card.source !== "demo" ? (
+          <span className="absolute inset-0 grid place-items-center opacity-0 transition hover:opacity-100">
+            <span className="grid h-14 w-14 place-items-center rounded-full bg-black/60 text-2xl">▶</span>
+          </span>
+        ) : null}
       </button>
       <div className="flex flex-1 flex-col gap-2 p-3">
         <div className="flex items-center gap-2 text-sm">

@@ -73,6 +73,10 @@ Depuis la fiche d'une recréation : copier la légende et les hashtags, refaire 
 
 Pour retoucher le rendu à l'œil : `npm run remotion:studio`.
 
+## Lecteur intégré
+
+La fiche d'une vidéo (clic sur une carte, bouton « Voir » d'une alerte) lit la vidéo d'origine dans Niche : c'est le fichier mp4 que TikTok sert, donc sans les sous-titres ajoutés par le lecteur TikTok (seuls restent les textes incrustés par le créateur dans l'image). Le fichier est téléchargé une fois dans `data/analysis/<id>/` et resservi ensuite (`/api/videos/:id/media`). La fiche d'une recréation montre aussi l'original à côté du résultat.
+
 ## Enregistreur d'écran
 
 Onglet 🎥 Enregistreur : choisir un écran, une fenêtre ou un onglet, puis régler la zone de capture (déplacer, redimensionner par le coin, ou tracer ; forme 9:16, carrée, 16:9 ou libre) et la taille de sortie (1080x1920, 1080x1080, 1920x1080, 720x1280 ou toute taille). Son du système si le navigateur le fournit, micro en option, 24 à 60 images par seconde. À l'arrêt : aperçu, téléchargement WebM, ou « Garder dans Niche » qui convertit en MP4 H.264 (ffmpeg embarqué) dans `data/public/captures/`. Un enregistrement gardé se choisit ensuite comme fond des scènes sans clip dans la fenêtre « Recréer » (il défile d'une scène à l'autre). Chrome ou Edge conseillés.

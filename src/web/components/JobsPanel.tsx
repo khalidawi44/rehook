@@ -62,6 +62,10 @@ const JobRow: React.FC<{ job: Job; open: boolean; toggle: () => void; reload: ()
       {open ? (
         <div className="grid gap-4 border-t border-zinc-800 p-4 md:grid-cols-[300px_1fr]">
           <div>
+            <details className="mb-3">
+              <summary className="cursor-pointer text-xs uppercase tracking-wide text-zinc-500">Vidéo d'origine (lecteur intégré)</summary>
+              <video src={`/api/videos/${job.video_id}/media`} controls playsInline preload="metadata" poster={job.video.cover ?? undefined} className="mt-2 w-full rounded-xl bg-black" />
+            </details>
             {job.output_file ? (
               <>
                 <video src={`/renders/${job.output_file}`} controls className="w-full rounded-xl bg-black" />

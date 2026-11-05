@@ -10,6 +10,7 @@ export const VideoModal: React.FC<{
   onDeleted: () => void;
 }> = ({ card, onClose, onRecreate, onFavorite, onDeleted }) => {
   const [snaps, setSnaps] = useState<Snapshot[]>([]);
+  const [playerError, setPlayerError] = useState(false);
   useEffect(() => {
     api.video(card.id).then((v) => setSnaps(v.snapshots)).catch(() => {});
   }, [card.id]);
@@ -23,7 +24,23 @@ export const VideoModal: React.FC<{
     <Modal title={`@${card.account.handle}`} onClose={onClose} wide>
       <div className="grid gap-5 md:grid-cols-[260px_1fr]">
         <div>
-          {card.cover ? <img src={card.cover} alt="" className="w-full rounded-xl object-cover" /> : null}
+          {card.source !== "demo" && !playerError ? (
+            <video
+              key={card.id}
+              src={`/api/videos/${card.id}/media`}
+              poster={card.cover ?? undefined}
+              controls
+              autoPlay
+              playsInline
+              preload="auto"
+              onError={() => setPlayerError(true)}
+              className="aspect-[9/16] w-full rounded-xl bg-black object-contain"
+            />
+          ) : card.cover ? (
+            <img src={card.cover} alt="" className="w-full rounded-xl object-cover" />
+          ) : null}
+          {playerError ? <p className="mt-2 text-xs text-zinc-500">Lecture impossible ici (TikTok n'a pas fourni le fichier). Le lien ci-dessous ouvre la vidéo sur TikTok.</p> : null}
+          {!playerError && card.source !== "demo" ? <p className="mt-1 text-center text-xs text-zinc-500">Vidéo d'origine, sans les sous-titres du lecteur TikTok</p> : null}
           <a href={card.url} target="_blank" rel="noreferrer" className="mt-3 block rounded-lg border border-zinc-700 px-3 py-2 text-center text-sm hover:bg-zinc-800">
             Ouvrir sur TikTok ↗
           </a>

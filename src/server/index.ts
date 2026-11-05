@@ -10,6 +10,7 @@ import { discoveryMode, importUrls, log, runCollection, runState, runWatch, sche
 import { listAlerts, markSeen, unseenCount } from "./alerts.js";
 import { listPacks, loadPack } from "./packs/index.js";
 import { deleteCapture, listCaptures, saveCapture } from "./captures.js";
+import { ensureSourceFile } from "./recreate/analyze.js";
 import { fetchTikTokProfile } from "./providers/tiktok-page.js";
 import { removeDemo, seedDemo } from "./providers/demo.js";
 import { createJob, deleteJob, getJob, listJobs, retryJob } from "./recreate/index.js";
@@ -70,6 +71,18 @@ app.get("/api/videos/:id", (req, res) => {
   const snaps = db.prepare("SELECT * FROM snapshots WHERE video_id = ? ORDER BY captured_at DESC LIMIT 50").all(video.id) as SnapshotRow[];
   res.json({ ...toCard(video, account, snaps), snapshots: snaps.reverse() });
 });
+
+// Lecteur intégré : le fichier mp4 d'origine (sans les sous-titres du lecteur TikTok).
+app.get(
+  "/api/videos/:id/media",
+  asyncRoute(async (req, res) => {
+    const video = db.prepare("SELECT * FROM videos WHERE id = ?").get(Number(req.params.id)) as VideoRow | undefined;
+    if (!video) return void res.status(404).json({ error: "Vidéo introuvable" });
+    const file = await ensureSourceFile(video, (l) => console.warn("[niche]", l));
+    if (!file) return void res.status(404).json({ error: "Vidéo d'origine indisponible (démo, ou TikTok a refusé le fichier)" });
+    res.sendFile(file, { acceptRanges: true, headers: { "Content-Type": "video/mp4", "Cache-Control": "private, max-age=3600" } });
+  }),
+);
 
 app.post("/api/videos/:id/favorite", (req, res) => {
   db.prepare("UPDATE videos SET favorite = CASE favorite WHEN 1 THEN 0 ELSE 1 END WHERE id = ?").run(Number(req.params.id));

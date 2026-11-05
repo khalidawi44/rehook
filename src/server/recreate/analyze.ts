@@ -64,6 +64,30 @@ async function whisper(audioFile: string, language: string | undefined, log: (l:
   }
 }
 
+/** Fichier mp4 de la vidéo source, téléchargé une fois dans data/analysis/<id>/ (lecteur intégré et analyse). */
+export async function ensureSourceFile(video: VideoRow, log: (l: string) => void = () => {}): Promise<string | null> {
+  const dir = path.join(ANALYSIS_DIR, String(video.id));
+  const mp4 = path.join(dir, "source.mp4");
+  if (fs.existsSync(mp4) && fs.statSync(mp4).size > 0) return mp4;
+  if (video.source === "demo" || !/tiktok\.com/.test(video.url)) return null;
+  fs.mkdirSync(dir, { recursive: true });
+  try {
+    const detail = await fetchTikTokVideoDetail(video.url, video.source);
+    if (!detail.playAddr) return null;
+    const r = await fetchTikTokAsset(detail.playAddr, detail.cookies);
+    if (!r.ok) throw new Error(`TikTok a répondu ${r.status}`);
+    const len = Number(r.headers.get("content-length") ?? 0);
+    if (len > MAX_BYTES) throw new Error("fichier trop gros");
+    const tmp = mp4 + ".part";
+    fs.writeFileSync(tmp, Buffer.from(await r.arrayBuffer()));
+    fs.renameSync(tmp, mp4);
+    return mp4;
+  } catch (e) {
+    log(`vidéo source : ${(e as Error).message}`);
+    return null;
+  }
+}
+
 export async function analyzeSource(video: VideoRow, log: (l: string) => void, onProgress?: (p: number) => void): Promise<SourceAnalysis> {
   const dir = path.join(ANALYSIS_DIR, String(video.id));
   const cacheFile = path.join(dir, "analysis.json");
