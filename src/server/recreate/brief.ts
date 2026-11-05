@@ -61,7 +61,8 @@ function fmt(n: number | null | undefined) {
 }
 
 export async function writeBrief(card: VideoCard, coverPath: string | null, opts: BriefOptions, log: (l: string) => void): Promise<Brief> {
-  const client = new Anthropic();
+  const workspace = process.env.ANTHROPIC_WORKSPACE_ID;
+  const client = new Anthropic(workspace ? { defaultHeaders: { "anthropic-workspace-id": workspace } } : {});
   const model = process.env.NICHE_MODEL || "claude-opus-5-5";
   const target = opts.targetSeconds ?? Math.min(90, Math.max(20, card.durationS ?? 45));
   const scenes = opts.sceneCount ?? Math.min(9, Math.max(4, Math.round(target / 8)));
