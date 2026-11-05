@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { api, fmtClock, fmtNum, timeAgo, type Job, type Stats, type VideoCard as Card } from "./api";
+import { api, fmtClock, fmtNum, timeAgo, type Alert, type Job, type Stats, type VideoCard as Card } from "./api";
+import { AlertsPanel } from "./components/AlertsPanel";
 import { VideoCard } from "./components/VideoCard";
 import { VideoModal } from "./components/VideoModal";
 import { RecreateModal } from "./components/RecreateModal";
@@ -8,7 +9,7 @@ import { AccountsPanel } from "./components/AccountsPanel";
 import { SettingsModal } from "./components/SettingsModal";
 import { ImportModal } from "./components/ImportModal";
 
-type Tab = "viral" | "all" | "accounts" | "jobs";
+type Tab = "viral" | "all" | "accounts" | "jobs" | "alerts";
 
 const PERIODS = [
   { k: "24h", l: "24 h" },
@@ -19,7 +20,7 @@ const PERIODS = [
 
 export const App: React.FC = () => {
   const [tab, setTab] = useState<Tab>("viral");
-  const [period, setPeriod] = useState("24h");
+  const [period, setPeriod] = useState("7d");
   const [duration, setDuration] = useState("all");
   const [sort, setSort] = useState("views");
   const [unfollowed, setUnfollowed] = useState(true);
@@ -34,6 +35,8 @@ export const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [notifPermission, setNotifPermission] = useState<string>(typeof Notification !== "undefined" ? Notification.permission : "unsupported");
   const [toast, setToast] = useState<string | null>(null);
 
   const notify = useCallback((m: string) => {
@@ -43,6 +46,36 @@ export const App: React.FC = () => {
 
   const loadStats = useCallback(() => api.stats().then(setStats).catch((e: Error) => setError(e.message)), []);
   const loadJobs = useCallback(() => api.jobs().then(setJobs).catch(() => {}), []);
+  const lastAlertId = React.useRef<number | null>(null);
+  const loadAlerts = useCallback(
+    () =>
+      api
+        .alerts()
+        .then((list) => {
+          setAlerts(list);
+          const newest = list[0]?.id ?? null;
+          if (lastAlertId.current !== null && newest !== null && newest > lastAlertId.current) {
+            const fresh = list.filter((a) => a.id > (lastAlertId.current ?? 0) && !a.seen);
+            for (const a of fresh.slice(0, 3)) {
+              if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+                const n = new Notification("Niche : ça explose", { body: a.message, tag: `niche-${a.id}` });
+                n.onclick = () => window.open(a.video.url, "_blank");
+              }
+            }
+            if (fresh.length) {
+              notify(fresh[0].message);
+              beep();
+            }
+          }
+          lastAlertId.current = newest;
+        })
+        .catch(() => {}),
+    [notify],
+  );
+  const askNotif = () => {
+    if (typeof Notification === "undefined") return;
+    Notification.requestPermission().then(setNotifPermission);
+  };
 
   const loadVideos = useCallback(() => {
     if (tab !== "viral" && tab !== "all") return;
@@ -64,12 +97,14 @@ export const App: React.FC = () => {
   useEffect(() => {
     loadStats();
     loadJobs();
+    loadAlerts();
     const t = setInterval(() => {
       loadStats();
       loadJobs();
+      loadAlerts();
     }, 5000);
     return () => clearInterval(t);
-  }, [loadStats, loadJobs]);
+  }, [loadStats, loadJobs, loadAlerts]);
 
   // Quand un relevé se termine, on recharge la grille.
   const wasRunning = React.useRef(false);
@@ -141,6 +176,15 @@ export const App: React.FC = () => {
           ) : (
             <span>Aucun relevé pour l'instant. Cliquez sur Actualiser.</span>
           )}
+          {stats ? (
+            <span className="ml-2 text-zinc-500">
+              {stats.run.watch.running
+                ? "Veille : relevé en cours…"
+                : stats.settings.watchMinutes > 0
+                  ? `Veille toutes les ${stats.settings.watchMinutes} min${stats.run.watch.lastAt ? `, dernier relevé ${timeAgo(stats.run.watch.lastAt, stats.now)} (${stats.run.watch.lastCount} vidéos)` : ""}.`
+                  : "Veille désactivée."}
+            </span>
+          ) : null}
           {stats && !stats.providers.anthropic ? (
             <span className="ml-2 rounded bg-amber-500/15 px-2 py-0.5 text-amber-300">ANTHROPIC_API_KEY manquante : la recréation ne marchera pas</span>
           ) : null}
@@ -157,6 +201,9 @@ export const App: React.FC = () => {
           </TabBtn>
           <TabBtn active={tab === "accounts"} onClick={() => setTab("accounts")}>
             Comptes <Count n={stats?.accounts} />
+          </TabBtn>
+          <TabBtn active={tab === "alerts"} onClick={() => { setTab("alerts"); api.alertsSeen().then(loadStats).catch(() => {}); }}>
+            🚨 Alertes {stats?.unseenAlerts ? <span className="ml-1 rounded-full bg-red-500 px-2 text-xs font-bold text-white">{stats.unseenAlerts}</span> : <Count n={alerts.length} />}
           </TabBtn>
           <TabBtn active={tab === "jobs"} onClick={() => setTab("jobs")}>
             🎬 Recréations {activeJobs ? <span className="ml-1 rounded-full bg-green-500 px-2 text-xs font-bold text-black">{activeJobs}</span> : <Count n={jobs.length} />}
@@ -214,8 +261,25 @@ export const App: React.FC = () => {
               <div className="rounded-xl border border-dashed border-zinc-700 p-10 text-center text-zinc-400">
                 <p className="text-lg font-semibold text-zinc-200">Rien à afficher avec ces filtres</p>
                 <p className="mt-2 text-sm">
-                  Élargissez la période, ajoutez des hashtags ou des comptes dans les réglages, importez une URL TikTok, ou lancez un relevé.
+                  {tab === "viral"
+                    ? "Une vidéo est « virale » si elle a moins de 7 jours et dépasse les seuils des réglages. Les nouvelles vidéos des comptes suivis arrivent à chaque découverte."
+                    : "Élargissez la période, ajoutez des hashtags ou des comptes dans les réglages, importez une URL TikTok, ou lancez un relevé."}
                 </p>
+                <div className="mt-4 flex flex-wrap justify-center gap-2 text-sm">
+                  {period !== "all" ? (
+                    <button onClick={() => setPeriod("all")} className="rounded-lg border border-zinc-600 px-3 py-1.5 hover:bg-zinc-800">
+                      Voir toute la période
+                    </button>
+                  ) : null}
+                  {tab === "viral" ? (
+                    <button onClick={() => setTab("all")} className="rounded-lg border border-zinc-600 px-3 py-1.5 hover:bg-zinc-800">
+                      Toutes les vidéos relevées
+                    </button>
+                  ) : null}
+                  <button onClick={refresh} className="rounded-lg bg-green-500 px-3 py-1.5 font-semibold text-black hover:bg-green-400">
+                    Lancer une découverte
+                  </button>
+                </div>
               </div>
             ) : null}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -235,6 +299,18 @@ export const App: React.FC = () => {
 
         {tab === "accounts" ? <AccountsPanel notify={notify} onChanged={loadStats} /> : null}
         {tab === "jobs" ? <JobsPanel jobs={jobs} reload={loadJobs} notify={notify} /> : null}
+        {tab === "alerts" ? (
+          <AlertsPanel
+            alerts={alerts}
+            reload={() => {
+              loadAlerts();
+              loadStats();
+            }}
+            onOpenVideo={(id) => api.video(id).then((v) => setDetail(v)).catch((e: Error) => notify(e.message))}
+            notifPermission={notifPermission}
+            askNotif={askNotif}
+          />
+        ) : null}
       </main>
 
       {detail ? (
@@ -291,6 +367,21 @@ export const App: React.FC = () => {
     </div>
   );
 };
+
+function beep() {
+  try {
+    const ctx = new AudioContext();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.frequency.value = 880;
+    g.gain.value = 0.08;
+    o.connect(g).connect(ctx.destination);
+    o.start();
+    o.stop(ctx.currentTime + 0.18);
+  } catch {
+    // pas de son disponible
+  }
+}
 
 const Stat: React.FC<{ value: number | undefined; label: string; accent?: boolean }> = ({ value, label, accent }) => (
   <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-1.5">

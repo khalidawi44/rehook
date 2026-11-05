@@ -1,18 +1,33 @@
 import React, { useEffect, useState } from "react";
-import { api, type Settings, type Stats } from "../api";
+import { api, type Pack, type Settings, type Stats } from "../api";
 import { Field, Modal, inputCls } from "./Modal";
 
 export const SettingsModal: React.FC<{ stats: Stats | null; onClose: () => void; notify: (m: string) => void }> = ({ stats, onClose, notify }) => {
   const [s, setS] = useState<Settings | null>(null);
   const [hashtags, setHashtags] = useState("");
   const [keywords, setKeywords] = useState("");
+  const [packs, setPacks] = useState<Pack[]>([]);
+  const [busy, setBusy] = useState(false);
   useEffect(() => {
     api.settings().then((x) => {
       setS(x);
       setHashtags(x.hashtags.join(", "));
       setKeywords(x.keywords.join(", "));
     });
+    api.packs().then(setPacks).catch(() => {});
   }, []);
+  const loadPack = async (name: string) => {
+    setBusy(true);
+    try {
+      const r = await api.loadPack(name);
+      notify(`Pack chargé : ${r.accounts} compte(s) suivi(s), ${r.videos} vidéo(s) importée(s). Découverte lancée.`);
+      onClose();
+    } catch (e) {
+      notify((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
   if (!s) return null;
   const save = async () => {
     try {
@@ -47,13 +62,49 @@ export const SettingsModal: React.FC<{ stats: Stats | null; onClose: () => void;
           <Field label="Viral : x médiane du compte">
             <input type="number" step="0.5" value={s.viralOutlierFactor} onChange={num("viralOutlierFactor")} className={inputCls} />
           </Field>
-          <Field label="Relevé auto (minutes)" hint="0 = jamais">
-            <input type="number" value={s.refreshMinutes} onChange={num("refreshMinutes")} className={inputCls} />
-          </Field>
           <Field label="Vidéos par source">
             <input type="number" value={s.videosPerSource} onChange={num("videosPerSource")} className={inputCls} />
           </Field>
         </div>
+        <div className="rounded-xl border border-zinc-800 p-3">
+          <div className="mb-2 text-sm font-medium text-zinc-200">Veille en continu</div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Field label="Découverte (minutes)" hint="Nouvelles vidéos des comptes suivis et hashtags. 0 = jamais">
+              <input type="number" value={s.discoveryMinutes} onChange={num("discoveryMinutes")} className={inputCls} />
+            </Field>
+            <Field label="Relevé des compteurs (minutes)" hint="Vues relues toutes les N minutes. 0 = jamais">
+              <input type="number" value={s.watchMinutes} onChange={num("watchMinutes")} className={inputCls} />
+            </Field>
+            <Field label="Fenêtre (heures)" hint="Vidéos publiées depuis moins de N heures">
+              <input type="number" value={s.watchHours} onChange={num("watchHours")} className={inputCls} />
+            </Field>
+            <Field label="Alerte : vues minimum">
+              <input type="number" value={s.alertMinViews} onChange={num("alertMinViews")} className={inputCls} />
+            </Field>
+            <Field label="Alerte : vues/h minimum" hint="Sur le dernier intervalle">
+              <input type="number" value={s.alertMinViewsPerHour} onChange={num("alertMinViewsPerHour")} className={inputCls} />
+            </Field>
+          </div>
+          <p className="mt-2 text-xs text-zinc-500">
+            Alertes dans l'onglet 🚨 Alertes et en notification du navigateur{stats?.providers.telegram ? ", et sur Telegram" : " (Telegram : NICHE_TELEGRAM_BOT_TOKEN et NICHE_TELEGRAM_CHAT_ID dans .env)"}.
+          </p>
+        </div>
+        {packs.length ? (
+          <div className="rounded-xl border border-zinc-800 p-3">
+            <div className="mb-2 text-sm font-medium text-zinc-200">Packs de démarrage</div>
+            {packs.map((p) => (
+              <div key={p.name} className="flex flex-wrap items-center gap-3 text-sm">
+                <div className="flex-1">
+                  <div className="font-medium">{p.title}{s.packLoaded === p.name ? <span className="ml-2 text-xs text-green-400">chargé</span> : null}</div>
+                  <div className="text-xs text-zinc-500">{p.description} {p.accounts} comptes, {p.videos} vidéos, hashtags {p.hashtags.map((h) => "#" + h).join(" ")}.</div>
+                </div>
+                <button onClick={() => loadPack(p.name)} disabled={busy} className="rounded-lg bg-green-500 px-3 py-1.5 text-xs font-semibold text-black hover:bg-green-400 disabled:opacity-50">
+                  {busy ? "Chargement…" : s.packLoaded === p.name ? "Recharger" : "Charger"}
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
         <div className="rounded-xl border border-zinc-800 p-3 text-xs text-zinc-400">
           <div className="mb-1 font-medium text-zinc-300">Fournisseurs (fichier .env)</div>
           <div>Découverte : {stats?.providers.discovery} · Images : {stats?.providers.images} · Voix : {stats?.providers.voice} · Script : {stats?.providers.anthropic ? "clé Anthropic présente" : "clé Anthropic absente"}</div>

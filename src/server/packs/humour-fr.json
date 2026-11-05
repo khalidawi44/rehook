@@ -1,0 +1,35 @@
+{
+  "name": "humour-fr",
+  "title": "Humour FR",
+  "description": "Comptes d'humour francophones très suivis (vérifiés le 05/11/2026) et quelques vidéos qui ont explosé, pour amorcer la veille.",
+  "accounts": [
+    "nicocaponecomedy",
+    "latiktokeuse869",
+    "shayvise",
+    "theo_landji",
+    "tuvok12",
+    "les_parodie_bros",
+    "davidvoinson",
+    "poqssi",
+    "k.hwijae",
+    "natoo",
+    "maxence_mnrc",
+    "lesgroos",
+    "itspierreboo",
+    "akamztwenty20"
+  ],
+  "hashtags": ["humour", "drole", "humourfrancais", "blague", "sketch", "rire"],
+  "videos": [
+    "https://www.tiktok.com/@shayvise/video/7699146306178059552",
+    "https://www.tiktok.com/@shayvise/video/7697660644887186721",
+    "https://www.tiktok.com/@shayvise/video/7665376319940742433",
+    "https://www.tiktok.com/@shayvise/video/7648682869174439201",
+    "https://www.tiktok.com/@shayvise/video/7636432889361599766",
+    "https://www.tiktok.com/@nicocaponecomedy/video/7627903728422620438",
+    "https://www.tiktok.com/@nicocaponecomedy/video/7571147270276615446",
+    "https://www.tiktok.com/@tuvok12/video/7639048294496357665",
+    "https://www.tiktok.com/@les_parodie_bros/video/7494686376080788758",
+    "https://www.tiktok.com/@davidvoinson/video/7574111164708195606",
+    "https://www.tiktok.com/@itspierreboo/video/7582361744325070110"
+  ]
+}

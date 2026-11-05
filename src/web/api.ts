@@ -47,9 +47,31 @@ export type Stats = {
   lastRun: { started_at: number; finished_at: number | null; ok: number | null; summary: string | null } | null;
   nextRefresh: number | null;
   now: number;
-  run: { running: boolean; startedAt: number | null; step: string; log: string[] };
-  providers: { discovery: string; images: string; voice: string; anthropic: boolean };
+  unseenAlerts: number;
+  settings: Settings;
+  run: {
+    running: boolean;
+    startedAt: number | null;
+    step: string;
+    log: string[];
+    watch: { running: boolean; lastAt: number | null; nextAt: number | null; lastCount: number; lastAlerts: number };
+  };
+  providers: { discovery: string; images: string; voice: string; anthropic: boolean; telegram: boolean };
 };
+
+export type Alert = {
+  id: number;
+  video_id: number;
+  kind: "explose" | "nouvelle" | "accelere";
+  message: string;
+  views: number;
+  views_per_hour: number;
+  created_at: number;
+  seen: number;
+  video: { id: number; caption: string; url: string; cover: string | null; handle: string };
+};
+
+export type Pack = { name: string; title: string; description: string; accounts: number; hashtags: string[]; videos: number };
 
 export type Account = {
   id: number;
@@ -70,9 +92,14 @@ export type Settings = {
   viralMinViews: number;
   viralMinViewsPerHour: number;
   viralOutlierFactor: number;
-  refreshMinutes: number;
+  discoveryMinutes: number;
+  watchMinutes: number;
+  watchHours: number;
+  alertMinViews: number;
+  alertMinViewsPerHour: number;
   videosPerSource: number;
   language: string;
+  packLoaded: string;
 };
 
 export type Scene = { narration: string; onScreen: string; visual: string; keywords: string[]; seconds: number };
@@ -147,6 +174,11 @@ export const api = {
   retryJob: (id: number, options: JobOptions) => req<Job>(`/api/jobs/${id}/retry`, { method: "POST", body: JSON.stringify(options) }),
   deleteJob: (id: number) => req<{ ok: boolean }>(`/api/jobs/${id}`, { method: "DELETE" }),
   music: () => req<string[]>("/api/music"),
+  alerts: () => req<Alert[]>("/api/alerts"),
+  alertsSeen: (id?: number) => req<{ unseen: number }>("/api/alerts/seen", { method: "POST", body: JSON.stringify({ id }) }),
+  watchNow: () => req<{ started: boolean }>("/api/watch", { method: "POST", body: "{}" }),
+  packs: () => req<Pack[]>("/api/packs"),
+  loadPack: (name: string) => req<{ accounts: number; videos: number; errors: string[] }>(`/api/packs/${name}`, { method: "POST", body: "{}" }),
 };
 
 // ---- Formats -----------------------------------------------------------------

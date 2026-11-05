@@ -1,7 +1,10 @@
-// Orchestration d'un relevé : découverte (hashtags, mots-clés, comptes suivis),
-// rafraîchissement des compteurs des vidéos récentes, copie des miniatures.
+// Orchestration des relevés.
+// - Découverte (toutes les N minutes) : comptes suivis, hashtags, mots-clés.
+// - Veille (toutes les 2 minutes par défaut) : relecture des compteurs des
+//   vidéos récentes, détection « ça explose », alertes.
 import { db, getSettings, now, upsertVideo, type AccountRow, type CollectedVideo, type VideoRow } from "./db.js";
 import { cacheCover } from "./covers.js";
+import { detectAlert } from "./alerts.js";
 import { fetchTikTokVideo } from "./providers/tiktok-page.js";
 import { apifyCollect } from "./providers/apify.js";
 import {
@@ -16,14 +19,21 @@ export type RunState = {
   startedAt: number | null;
   step: string;
   log: string[];
+  watch: { running: boolean; lastAt: number | null; nextAt: number | null; lastCount: number; lastAlerts: number };
 };
 
-export const runState: RunState = { running: false, startedAt: null, step: "", log: [] };
+export const runState: RunState = {
+  running: false,
+  startedAt: null,
+  step: "",
+  log: [],
+  watch: { running: false, lastAt: null, nextAt: null, lastCount: 0, lastAlerts: 0 },
+};
 
-const log = (line: string) => {
+export const log = (line: string) => {
   const stamp = new Date().toISOString().slice(11, 19);
   runState.log.push(`${stamp} ${line}`);
-  if (runState.log.length > 200) runState.log.shift();
+  if (runState.log.length > 300) runState.log.shift();
   console.log("[niche]", line);
 };
 
@@ -56,6 +66,7 @@ async function discover(): Promise<CollectedVideo[]> {
       out.push(...(await browserCollectAccount(h, per, log)));
     } catch (e) {
       log(`compte @${h} : ${(e as Error).message}`);
+      if (/Playwright n'est pas installé|Executable doesn't exist/.test((e as Error).message)) break;
     }
   }
   for (const tag of settings.hashtags) {
@@ -64,6 +75,7 @@ async function discover(): Promise<CollectedVideo[]> {
       out.push(...(await browserCollectHashtag(tag, per, log)));
     } catch (e) {
       log(`hashtag #${tag} : ${(e as Error).message}`);
+      break;
     }
   }
   for (const kw of settings.keywords) {
@@ -72,6 +84,7 @@ async function discover(): Promise<CollectedVideo[]> {
       out.push(...(await browserCollectKeyword(kw, per, log)));
     } catch (e) {
       log(`recherche « ${kw} » : ${(e as Error).message}`);
+      break;
     }
   }
   if (!followed.length && !settings.hashtags.length && !settings.keywords.length) {
@@ -85,29 +98,32 @@ async function discover(): Promise<CollectedVideo[]> {
   return out;
 }
 
-/** Relit les pages des vidéos récentes pour avoir un nouveau relevé (vues/h, croissance). */
-async function refreshStats(maxVideos: number) {
-  const since = now() - 7 * 86400;
+/** Relit les pages des vidéos récentes : un relevé de plus, et détection d'alerte. */
+async function refreshStats(maxVideos: number, delayMs: number): Promise<{ ok: number; total: number; alerts: number }> {
+  const s = getSettings();
+  const since = now() - s.watchHours * 3600;
   const rows = db
     .prepare(
       `SELECT v.* FROM videos v
        WHERE v.source <> 'demo' AND (v.posted_at IS NULL OR v.posted_at >= ?)
-         AND v.last_seen_at < ?
        ORDER BY v.last_seen_at ASC LIMIT ?`,
     )
-    .all(since, now() - 1800, maxVideos) as VideoRow[];
+    .all(since, maxVideos) as VideoRow[];
   let ok = 0;
+  let alerts = 0;
   for (const v of rows) {
     try {
       const fresh = await fetchTikTokVideo(v.url, v.source);
-      upsertVideo(fresh);
+      const { video } = upsertVideo(fresh);
+      if (detectAlert(video, false)) alerts++;
       ok++;
     } catch (e) {
       log(`stats ${v.url} : ${(e as Error).message}`);
+      db.prepare("UPDATE videos SET last_seen_at = ? WHERE id = ?").run(now(), v.id);
     }
-    await sleep(1200 + Math.random() * 800);
+    await sleep(delayMs + Math.random() * 300);
   }
-  if (rows.length) log(`compteurs rafraîchis : ${ok}/${rows.length}`);
+  return { ok, total: rows.length, alerts };
 }
 
 export async function runCollection(opts: { discover?: boolean; refresh?: boolean } = {}): Promise<string> {
@@ -121,6 +137,7 @@ export async function runCollection(opts: { discover?: boolean; refresh?: boolea
   try {
     let added = 0;
     let seen = 0;
+    let alerts = 0;
     if (opts.discover ?? true) {
       runState.step = "découverte";
       const found = await discover();
@@ -128,14 +145,17 @@ export async function runCollection(opts: { discover?: boolean; refresh?: boolea
         const { video, isNew } = upsertVideo(cv);
         seen++;
         if (isNew) added++;
+        if (detectAlert(video, isNew)) alerts++;
         await cacheCover(video);
       }
     }
     if (opts.refresh ?? true) {
       runState.step = "compteurs";
-      await refreshStats(80);
+      const r = await refreshStats(120, 900);
+      alerts += r.alerts;
+      if (r.total) log(`compteurs rafraîchis : ${r.ok}/${r.total}`);
     }
-    summary = `${seen} vidéo(s) vue(s), ${added} nouvelle(s)`;
+    summary = `${seen} vidéo(s) vue(s), ${added} nouvelle(s), ${alerts} alerte(s)`;
     log("terminé : " + summary);
     db.prepare("UPDATE runs SET finished_at = ?, ok = 1, summary = ? WHERE id = ?").run(now(), summary, runId);
   } catch (e) {
@@ -149,6 +169,25 @@ export async function runCollection(opts: { discover?: boolean; refresh?: boolea
   return summary;
 }
 
+/** Boucle de veille : rapide, silencieuse, une alerte dès qu'une vidéo décolle. */
+export async function runWatch(): Promise<void> {
+  if (runState.watch.running || runState.running) return;
+  runState.watch.running = true;
+  try {
+    const r = await refreshStats(80, 450);
+    runState.watch.lastAt = now();
+    runState.watch.lastCount = r.ok;
+    runState.watch.lastAlerts = r.alerts;
+    if (r.alerts) log(`veille : ${r.alerts} alerte(s) sur ${r.ok} vidéo(s)`);
+  } catch (e) {
+    log("veille : " + (e as Error).message);
+  } finally {
+    runState.watch.running = false;
+    const m = getSettings().watchMinutes;
+    runState.watch.nextAt = m > 0 ? now() + m * 60 : null;
+  }
+}
+
 /** Import manuel d'une ou plusieurs URL TikTok. */
 export async function importUrls(urls: string[]): Promise<{ ok: number; errors: string[] }> {
   let ok = 0;
@@ -156,23 +195,36 @@ export async function importUrls(urls: string[]): Promise<{ ok: number; errors: 
   for (const u of urls) {
     try {
       const cv = await fetchTikTokVideo(u, "import");
-      const { video } = upsertVideo(cv);
+      const { video, isNew } = upsertVideo(cv);
+      detectAlert(video, isNew);
       await cacheCover(video);
       ok++;
     } catch (e) {
       errors.push(`${u} : ${(e as Error).message}`);
     }
+    await sleep(500);
   }
   return { ok, errors };
 }
 
-let timer: NodeJS.Timeout | null = null;
+let discoveryTimer: NodeJS.Timeout | null = null;
+let watchTimer: NodeJS.Timeout | null = null;
 
 export function scheduleRefresh() {
-  if (timer) clearInterval(timer);
-  const minutes = getSettings().refreshMinutes;
-  if (!minutes || minutes <= 0) return;
-  timer = setInterval(() => {
-    runCollection().catch((e) => log("relevé planifié : " + (e as Error).message));
-  }, minutes * 60_000);
+  if (discoveryTimer) clearInterval(discoveryTimer);
+  if (watchTimer) clearInterval(watchTimer);
+  const s = getSettings();
+  if (s.discoveryMinutes > 0) {
+    discoveryTimer = setInterval(() => {
+      runCollection({ discover: true, refresh: false }).catch((e) => log("découverte planifiée : " + (e as Error).message));
+    }, s.discoveryMinutes * 60_000);
+  }
+  if (s.watchMinutes > 0) {
+    runState.watch.nextAt = now() + s.watchMinutes * 60;
+    watchTimer = setInterval(() => {
+      runWatch().catch((e) => log("veille : " + (e as Error).message));
+    }, s.watchMinutes * 60_000);
+  } else {
+    runState.watch.nextAt = null;
+  }
 }

@@ -6,7 +6,9 @@ import express from "express";
 import { z } from "zod";
 import { db, getSettings, now, saveSettings, upsertAccount, type AccountRow, type SnapshotRow, type VideoRow } from "./db.js";
 import { listCards, stats, toCard, type ListQuery } from "./metrics.js";
-import { discoveryMode, importUrls, runCollection, runState, scheduleRefresh } from "./collector.js";
+import { discoveryMode, importUrls, log, runCollection, runState, runWatch, scheduleRefresh } from "./collector.js";
+import { listAlerts, markSeen, unseenCount } from "./alerts.js";
+import { listPacks, loadPack } from "./packs/index.js";
 import { fetchTikTokProfile } from "./providers/tiktok-page.js";
 import { removeDemo, seedDemo } from "./providers/demo.js";
 import { createJob, deleteJob, getJob, listJobs, retryJob } from "./recreate/index.js";
@@ -30,12 +32,15 @@ const asyncRoute =
 app.get("/api/stats", (_req, res) => {
   res.json({
     ...stats(),
+    unseenAlerts: unseenCount(),
+    settings: getSettings(),
     run: runState,
     providers: {
       discovery: discoveryMode(),
       images: imageProvider(),
       voice: voiceProvider(),
       anthropic: !!process.env.ANTHROPIC_API_KEY,
+      telegram: !!(process.env.NICHE_TELEGRAM_BOT_TOKEN && process.env.NICHE_TELEGRAM_CHAT_ID),
     },
   });
 });
@@ -149,7 +154,11 @@ const SettingsSchema = z.object({
   viralMinViews: z.number().min(0).optional(),
   viralMinViewsPerHour: z.number().min(0).optional(),
   viralOutlierFactor: z.number().min(1).optional(),
-  refreshMinutes: z.number().min(0).optional(),
+  discoveryMinutes: z.number().min(0).optional(),
+  watchMinutes: z.number().min(0).optional(),
+  watchHours: z.number().min(1).max(720).optional(),
+  alertMinViews: z.number().min(0).optional(),
+  alertMinViewsPerHour: z.number().min(0).optional(),
   videosPerSource: z.number().min(1).max(200).optional(),
   language: z.string().optional(),
 });
@@ -164,6 +173,35 @@ app.put("/api/settings", (req, res) => {
   scheduleRefresh();
   res.json(next);
 });
+
+// ---- Veille et alertes -------------------------------------------------------
+
+app.get("/api/alerts", (_req, res) => res.json(listAlerts()));
+app.post("/api/alerts/seen", (req, res) => {
+  markSeen(req.body?.id ? Number(req.body.id) : undefined);
+  res.json({ unseen: unseenCount() });
+});
+app.post(
+  "/api/watch",
+  asyncRoute(async (_req, res) => {
+    if (runState.watch.running || runState.running) return void res.json({ started: false });
+    runWatch().catch(() => {});
+    res.json({ started: true });
+  }),
+);
+
+// ---- Packs de démarrage ------------------------------------------------------
+
+app.get("/api/packs", (_req, res) => res.json(listPacks().map(({ name, title, description, accounts, hashtags, videos }) => ({ name, title, description, accounts: accounts.length, hashtags, videos: videos.length }))));
+app.post(
+  "/api/packs/:name",
+  asyncRoute(async (req, res) => {
+    const r = await loadPack(String(req.params.name), log);
+    scheduleRefresh();
+    runCollection({ discover: true, refresh: false }).catch(() => {});
+    res.json(r);
+  }),
+);
 
 app.post("/api/demo", (req, res) => {
   if (req.body?.remove) return res.json({ removed: removeDemo() });
@@ -231,8 +269,19 @@ const port = Number(process.env.PORT ?? 3001);
 app.listen(port, () => {
   console.log(`[niche] API sur http://localhost:${port}`);
   const count = (db.prepare("SELECT COUNT(*) AS n FROM videos").get() as { n: number }).n;
-  if (count === 0 && process.env.NICHE_NO_DEMO !== "1") {
+  const pack = process.env.NICHE_PACK ?? "humour-fr";
+  const settings = getSettings();
+  scheduleRefresh();
+  if (pack && !settings.packLoaded) {
+    console.log(`[niche] premier lancement : chargement du pack ${pack} (comptes, hashtags, vidéos)…`);
+    loadPack(pack, log)
+      .then(async (r) => {
+        console.log(`[niche] pack ${pack} : ${r.accounts} compte(s), ${r.videos} vidéo(s)`);
+        await runCollection({ discover: true, refresh: false });
+        await runWatch();
+      })
+      .catch((e) => console.error("[niche] pack :", (e as Error).message));
+  } else if (count === 0 && process.env.NICHE_NO_DEMO !== "1") {
     console.log(`[niche] base vide : ${seedDemo()} vidéos de démonstration ajoutées`);
   }
-  scheduleRefresh();
 });

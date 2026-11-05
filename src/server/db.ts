@@ -77,6 +77,18 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS alerts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  video_id INTEGER NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  message TEXT NOT NULL,
+  views INTEGER NOT NULL DEFAULT 0,
+  views_per_hour REAL NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  seen INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_alerts_video ON alerts(video_id, created_at);
+
 CREATE TABLE IF NOT EXISTS runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   started_at INTEGER NOT NULL,
@@ -155,20 +167,34 @@ export type Settings = {
   viralMinViews: number;
   viralMinViewsPerHour: number;
   viralOutlierFactor: number;
-  refreshMinutes: number;
+  /** Découverte (comptes suivis, hashtags, mots-clés) : toutes les N minutes, 0 = jamais. */
+  discoveryMinutes: number;
+  /** Veille : relecture des compteurs des vidéos récentes toutes les N minutes, 0 = jamais. */
+  watchMinutes: number;
+  /** Fenêtre de veille : vidéos publiées depuis moins de N heures. */
+  watchHours: number;
+  /** Alerte « ça explose » : vues minimum et rythme minimum (vues/h) sur le dernier intervalle. */
+  alertMinViews: number;
+  alertMinViewsPerHour: number;
   videosPerSource: number;
   language: string;
+  packLoaded: string;
 };
 
 const DEFAULT_SETTINGS: Settings = {
-  hashtags: ["aistory", "storytime", "brainrot"],
+  hashtags: ["humour", "drole", "humourfrancais", "blague", "sketch"],
   keywords: [],
   viralMinViews: 100_000,
   viralMinViewsPerHour: 2_000,
   viralOutlierFactor: 3,
-  refreshMinutes: Number(process.env.NICHE_REFRESH_MINUTES ?? 120),
+  discoveryMinutes: Number(process.env.NICHE_DISCOVERY_MINUTES ?? 15),
+  watchMinutes: Number(process.env.NICHE_WATCH_MINUTES ?? 2),
+  watchHours: 72,
+  alertMinViews: 5_000,
+  alertMinViewsPerHour: 3_000,
   videosPerSource: 30,
   language: "auto",
+  packLoaded: "",
 };
 
 export function getSettings(): Settings {

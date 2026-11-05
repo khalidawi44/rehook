@@ -259,6 +259,6 @@ export function stats() {
     | undefined;
   const settings = getSettings();
   const nextRefresh =
-    settings.refreshMinutes > 0 && lastRun?.finished_at ? lastRun.finished_at + settings.refreshMinutes * 60 : null;
+    settings.discoveryMinutes > 0 && lastRun?.finished_at ? lastRun.finished_at + settings.discoveryMinutes * 60 : null;
   return { viralToday, viralAll, total, followed, accounts, lastRun, nextRefresh, now: nowS };
 }
