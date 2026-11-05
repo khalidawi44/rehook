@@ -1,71 +1,99 @@
-# Lanceur Niche (Windows). Lance par Niche.cmd.
+# Lanceur Niche (Windows), lance par Niche.cmd sans fenetre.
 # 1. met a jour le code depuis GitHub, 2. installe ce qui manque, 3. construit l'interface,
-# 4. demarre le serveur, 5. ouvre le navigateur. Fermer cette fenetre arrete Niche.
+# 4. demarre le serveur en arriere-plan, 5. ouvre le navigateur des que l'API repond.
+# Tout est journalise dans data\niche.log. Arreter-Niche.cmd arrete le serveur.
 $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $here
-$host.UI.RawUI.WindowTitle = "Niche"
 $port = 3001
+$url = "http://localhost:$port"
+New-Item -ItemType Directory -Force -Path "data" | Out-Null
+$log = Join-Path $here "data\niche.log"
+$launcherLog = Join-Path $here "data\lanceur.log"
+"==== $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') lancement" | Out-File -Append -Encoding utf8 $launcherLog
 
-function Say($m) { Write-Host ("[niche] " + $m) -ForegroundColor Green }
-function Warn($m) { Write-Host ("[niche] " + $m) -ForegroundColor Yellow }
-
-# Prerequis
-if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-  Write-Host "Node.js est introuvable. Installe-le depuis https://nodejs.org (version 22 ou plus), puis relance." -ForegroundColor Red
+function Say($m) { ("[{0}] {1}" -f (Get-Date -Format 'HH:mm:ss'), $m) | Out-File -Append -Encoding utf8 $launcherLog }
+function Fail($m) {
+  Say ("ERREUR : " + $m)
+  Add-Type -AssemblyName System.Windows.Forms
+  [System.Windows.Forms.MessageBox]::Show("$m`n`nDetails dans :`n$launcherLog", "Niche", "OK", "Error") | Out-Null
   exit 1
 }
-$nodeMajor = [int]((node -v).TrimStart("v").Split(".")[0])
-if ($nodeMajor -lt 22) { Write-Host "Node.js $(node -v) est trop ancien : il faut la version 22 ou plus." -ForegroundColor Red; exit 1 }
 
-# Arrete une instance precedente qui garderait le port
+function Listening() {
+  try { return (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1) } catch { return $null }
+}
+function ApiUp() {
+  try { $r = Invoke-WebRequest -UseBasicParsing "$url/api/stats" -TimeoutSec 2; return ($r.StatusCode -eq 200) } catch { return $false }
+}
+
 try {
-  $conn = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
-  if ($conn) { Warn "Une instance tourne deja (PID $($conn.OwningProcess)) : arret."; Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1 }
-} catch {}
+  if (-not (Get-Command node -ErrorAction SilentlyContinue)) { Fail "Node.js est introuvable. Installe-le depuis https://nodejs.org (version 22 ou plus), puis relance." }
+  $nodeMajor = [int]((node -v).TrimStart("v").Split(".")[0])
+  if ($nodeMajor -lt 22) { Fail "Node.js $(node -v) est trop ancien : il faut la version 22 ou plus." }
 
-# Mise a jour depuis GitHub (le dossier niche/ est dans un depot git)
-$updated = $false
-if (Get-Command git -ErrorAction SilentlyContinue) {
-  try {
-    $branch = (git rev-parse --abbrev-ref HEAD 2>$null).Trim()
-    if ($branch -and $branch -ne "HEAD") {
-      Say "Verification des mises a jour ($branch)..."
-      git fetch origin $branch 2>$null | Out-Null
-      $local = (git rev-parse HEAD).Trim()
-      $remote = (git rev-parse "origin/$branch").Trim()
-      if ($local -ne $remote) {
-        Say "Nouvelle version disponible : mise a jour."
-        git reset --hard "origin/$branch" | Out-Null
-        $updated = $true
-      } else { Say "Niche est a jour." }
-    }
-  } catch { Warn "Mise a jour impossible (hors ligne ?) : on continue avec la version actuelle." }
-} else { Warn "git introuvable : pas de mise a jour automatique." }
+  # Mise a jour depuis GitHub
+  $updated = $false
+  if (Get-Command git -ErrorAction SilentlyContinue) {
+    try {
+      $branch = (git rev-parse --abbrev-ref HEAD 2>$null).Trim()
+      if ($branch -and $branch -ne "HEAD") {
+        git fetch origin $branch 2>&1 | Out-Null
+        $local = (git rev-parse HEAD).Trim()
+        $remote = (git rev-parse "origin/$branch").Trim()
+        if ($local -ne $remote) {
+          Say "Mise a jour : $local -> $remote"
+          git reset --hard "origin/$branch" 2>&1 | Out-File -Append -Encoding utf8 $launcherLog
+          $updated = $true
+        } else { Say "A jour ($branch)." }
+      }
+    } catch { Say "Mise a jour impossible (hors ligne ?) : $($_.Exception.Message)" }
+  } else { Say "git introuvable : pas de mise a jour automatique." }
 
-# Dependances et interface
-if ($updated -or -not (Test-Path "node_modules")) { Say "Installation des dependances..."; npm install --no-audit --no-fund; if ($LASTEXITCODE -ne 0) { throw "npm install a echoue" } }
-if ($updated -or -not (Test-Path "dist\index.html")) { Say "Construction de l'interface..."; npm run build; if ($LASTEXITCODE -ne 0) { throw "npm run build a echoue" } }
+  # Deja en route et a jour : on ouvre juste le navigateur.
+  $running = Listening
+  if ($running -and -not $updated -and (ApiUp)) {
+    Say "Niche tourne deja : ouverture du navigateur."
+    Start-Process $url
+    exit 0
+  }
+  if ($running) {
+    Say "Arret de l'instance precedente (PID $($running.OwningProcess))."
+    Stop-Process -Id $running.OwningProcess -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1
+  }
 
-# Navigateur pour la decouverte TikTok (rapide si deja installe)
-try { Say "Verification du navigateur de decouverte..."; npx playwright install chromium 2>&1 | Select-String -Pattern "Downloading|downloaded" | ForEach-Object { Say $_ } } catch { Warn "Playwright : $($_.Exception.Message)" }
+  if ($updated -or -not (Test-Path "node_modules")) {
+    Say "npm install..."
+    cmd /c "npm install --no-audit --no-fund" 2>&1 | Out-File -Append -Encoding utf8 $launcherLog
+    if ($LASTEXITCODE -ne 0) { Fail "npm install a echoue." }
+  }
+  if ($updated -or -not (Test-Path "dist\index.html")) {
+    Say "npm run build..."
+    cmd /c "npm run build" 2>&1 | Out-File -Append -Encoding utf8 $launcherLog
+    if ($LASTEXITCODE -ne 0) { Fail "La construction de l'interface a echoue." }
+  }
+  try { cmd /c "npx playwright install chromium" 2>&1 | Out-File -Append -Encoding utf8 $launcherLog } catch { Say "Playwright : $($_.Exception.Message)" }
 
-# Fichier .env
-if (-not (Test-Path ".env")) {
-  Copy-Item ".env.example" ".env"
-  Warn "Premier lancement : renseigne ANTHROPIC_API_KEY dans le fichier .env qui s'ouvre, enregistre, puis ferme le Bloc-notes."
-  Start-Process -Wait notepad ".env"
+  if (-not (Test-Path ".env")) {
+    Copy-Item ".env.example" ".env"
+    Add-Type -AssemblyName System.Windows.Forms
+    [System.Windows.Forms.MessageBox]::Show("Premier lancement : le fichier .env va s'ouvrir. Renseigne ANTHROPIC_API_KEY, enregistre, puis ferme le Bloc-notes.", "Niche", "OK", "Information") | Out-Null
+    Start-Process -Wait notepad ".env"
+  }
+
+  Say "Demarrage du serveur."
+  $env:PORT = "$port"
+  $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c npx tsx src/server/index.ts" -WindowStyle Hidden -PassThru -RedirectStandardOutput $log -RedirectStandardError (Join-Path $here "data\niche.err.log")
+  $ok = $false
+  for ($i = 0; $i -lt 120; $i++) {
+    Start-Sleep -Milliseconds 500
+    if (ApiUp) { $ok = $true; break }
+    if ($proc.HasExited) { break }
+  }
+  if ($ok) { Say "Pret : ouverture de $url"; Start-Process $url } else { Fail "Le serveur n'a pas demarre. Regarde data\niche.err.log." }
+  Wait-Process -Id $proc.Id
+  Say "Serveur arrete."
+} catch {
+  Fail $_.Exception.Message
 }
-
-# Demarrage
-Say "Demarrage de Niche sur http://localhost:$port (ferme cette fenetre pour arreter)."
-$env:PORT = "$port"
-$proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c npx tsx src/server/index.ts" -NoNewWindow -PassThru
-$ok = $false
-for ($i = 0; $i -lt 60; $i++) {
-  Start-Sleep -Milliseconds 500
-  try { $r = Invoke-WebRequest -UseBasicParsing "http://localhost:$port/api/stats" -TimeoutSec 2; if ($r.StatusCode -eq 200) { $ok = $true; break } } catch {}
-  if ($proc.HasExited) { break }
-}
-if ($ok) { Start-Process "http://localhost:$port" } else { Warn "Le serveur met du temps a repondre : ouvre http://localhost:$port a la main." }
-Wait-Process -Id $proc.Id

@@ -1,5 +1,4 @@
 @echo off
-rem Lanceur Niche : double-clic, mise a jour automatique, demarrage, ouverture du navigateur.
-cd /d "%~dp0"
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0launch.ps1"
-if errorlevel 1 pause
+rem Lanceur Niche : double-clic. Tourne en arriere-plan (aucune fenetre), ouvre le navigateur une fois pret.
+rem Journal : data\niche.log. Pour arreter : Arreter-Niche.cmd.
+start "" /min powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0launch.ps1"

@@ -8,7 +8,7 @@ Niche est un tableau de bord local (Node 22, React, SQLite) qui :
 
 ## Démarrer
 
-**Windows, en un double-clic** : `niche\Niche.cmd` (clic droit → Envoyer vers → Bureau pour avoir un raccourci). À chaque lancement il met Niche à jour depuis GitHub, installe ce qui manque, construit l'interface, démarre le serveur et ouvre http://localhost:3001. Au premier lancement il ouvre `.env` dans le Bloc-notes pour la clé Anthropic. Fermer la fenêtre arrête Niche. Il faut Node.js 22 ou plus et git.
+**Windows, en un double-clic** : `niche\Niche.cmd` (clic droit → Envoyer vers → Bureau pour avoir un raccourci). Il tourne sans fenêtre : à chaque lancement il met Niche à jour depuis GitHub, installe ce qui manque, construit l'interface, démarre le serveur en arrière-plan et ouvre http://localhost:3001 dès que l'API répond. Si Niche tourne déjà et qu'il n'y a pas de mise à jour, il ouvre juste l'onglet. Au premier lancement il ouvre `.env` dans le Bloc-notes pour la clé Anthropic. `Arreter-Niche.cmd` arrête le serveur. Journaux : `data\lanceur.log`, `data\niche.log`, `data\niche.err.log`. Il faut Node.js 22 ou plus et git.
 
 **À la main (toutes plateformes)** :
 
