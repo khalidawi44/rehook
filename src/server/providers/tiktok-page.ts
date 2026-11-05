@@ -26,7 +26,15 @@ type ItemStruct = {
   createTime?: string | number;
   stats?: Record<string, number | string>;
   statsV2?: Record<string, string>;
-  video?: { duration?: number; cover?: string; originCover?: string };
+  video?: {
+    duration?: number;
+    cover?: string;
+    originCover?: string;
+    playAddr?: string;
+    downloadAddr?: string;
+    subtitleInfos?: { LanguageCodeName?: string; Url?: string; Format?: string; Source?: string }[];
+  };
+  stickersOnItem?: { stickerText?: string[] }[];
   author?: { uniqueId?: string; nickname?: string; avatarThumb?: string; avatarMedium?: string; region?: string };
   authorStats?: { followerCount?: number };
   textExtra?: { hashtagName?: string }[];
@@ -87,8 +95,30 @@ export function extractRehydration(html: string): Record<string, unknown> | null
   }
 }
 
+export type TikTokVideoDetail = {
+  video: CollectedVideo;
+  playAddr: string | null;
+  cookies: string;
+  subtitles: { lang: string; url: string; format: string; source: string }[];
+  stickers: string[];
+};
+
+/** Comme fetchTikTokVideo, avec en plus l'adresse du fichier, les sous-titres et le texte incrusté. */
+export async function fetchTikTokVideoDetail(inputUrl: string, source = "import"): Promise<TikTokVideoDetail> {
+  const { item, video, cookies } = await fetchItem(inputUrl, source);
+  const subtitles = (item.video?.subtitleInfos ?? [])
+    .filter((s) => s.Url)
+    .map((s) => ({ lang: s.LanguageCodeName ?? "", url: s.Url!, format: (s.Format ?? "").toLowerCase(), source: s.Source ?? "" }));
+  const stickers = (item.stickersOnItem ?? []).flatMap((st) => st.stickerText ?? []).map((t) => t.trim()).filter(Boolean);
+  return { video, playAddr: item.video?.playAddr ?? item.video?.downloadAddr ?? null, cookies, subtitles, stickers };
+}
+
 /** Lit une page vidéo TikTok et renvoie la vidéo avec ses stats du moment. */
 export async function fetchTikTokVideo(inputUrl: string, source = "import"): Promise<CollectedVideo> {
+  return (await fetchItem(inputUrl, source)).video;
+}
+
+async function fetchItem(inputUrl: string, source: string): Promise<{ item: ItemStruct; video: CollectedVideo; cookies: string }> {
   let url = inputUrl.trim();
   if (SHORT_URL_RE.test(url) && !VIDEO_URL_RE.test(url)) url = await resolveShortUrl(url);
   const parsed = parseTikTokUrl(url);
@@ -109,7 +139,13 @@ export async function fetchTikTokVideo(inputUrl: string, source = "import"): Pro
   }
   const video = itemToVideo(item, source, parsed.handle);
   if (!video) throw new Error("Données incomplètes pour " + canonical);
-  return video;
+  const cookies = (r.headers.getSetCookie?.() ?? []).map((c) => c.split(";")[0]).join("; ");
+  return { item, video, cookies };
+}
+
+/** Télécharge un fichier servi par TikTok (vidéo, sous-titres) avec les cookies de la page. */
+export async function fetchTikTokAsset(url: string, cookies: string): Promise<Response> {
+  return fetch(url, { headers: { "User-Agent": BROWSER_UA, Referer: "https://www.tiktok.com/", Cookie: cookies } });
 }
 
 /** Infos publiques d'un profil (abonnés, avatar). La liste des vidéos passe par le navigateur ou Apify. */

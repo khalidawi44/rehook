@@ -104,6 +104,11 @@ export type Settings = {
 
 export type Scene = { narration: string; onScreen: string; visual: string; keywords: string[]; seconds: number };
 export type Brief = {
+  sourceSummary?: string;
+  mechanism?: string;
+  mode?: "auto" | "tournage";
+  shootingTips?: string;
+  analysis?: { frames: string[]; transcript: string | null; transcriptSource: string | null; stickers: string[] };
   language: string;
   niche: string;
   format: string;

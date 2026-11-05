@@ -6,10 +6,13 @@ import { toCard } from "../metrics.js";
 import { coverPath } from "../covers.js";
 import { JOBS_PUBLIC_DIR, PUBLIC_DIR } from "../paths.js";
 import { writeBrief, type Brief, type BriefOptions } from "./brief.js";
+import { analyzeSource, type SourceAnalysis } from "./analyze.js";
 import { imageProvider, makeImages } from "./images.js";
 import { makeVoices, voiceProvider } from "./voice.js";
 import { renderVideo } from "./render.js";
 import type { NicheProps } from "../../video/types.js";
+
+export type BriefAnalysis = { frames: string[]; transcript: string | null; transcriptSource: string | null; stickers: string[] };
 
 export type JobOptions = BriefOptions & {
   images?: string;
@@ -90,22 +93,36 @@ async function runJob(job: JobRow) {
   const snaps = db.prepare("SELECT * FROM snapshots WHERE video_id = ? ORDER BY captured_at DESC LIMIT 6").all(video.id) as SnapshotRow[];
   const card = toCard(video, account, snaps);
 
-  update(job.id, { status: "running", step: "Analyse et script", progress: 0.05 }, "démarrage");
-
-  let brief: Brief;
-  if (opts.reuseBrief && job.brief) {
-    brief = JSON.parse(job.brief) as Brief;
-    log("script : brief existant réutilisé");
-  } else {
-    brief = await writeBrief(card, coverPath(video), opts, log);
-    update(job.id, { brief: JSON.stringify(brief) });
-  }
-  update(job.id, { progress: 0.25, step: "Images" });
+  update(job.id, { status: "running", step: "Analyse de la vidéo source", progress: 0.02 }, "démarrage");
 
   const jobDir = path.join(JOBS_PUBLIC_DIR, String(job.id));
   fs.rmSync(jobDir, { recursive: true, force: true });
   fs.mkdirSync(jobDir, { recursive: true });
   const relDir = `jobs/${job.id}`;
+
+  let brief: Brief & { analysis?: BriefAnalysis };
+  if (opts.reuseBrief && job.brief) {
+    brief = JSON.parse(job.brief) as Brief;
+    log("script : brief existant réutilisé");
+    update(job.id, { progress: 0.25, step: "Images" });
+  } else {
+    const analysis: SourceAnalysis = await analyzeSource(video, log, (p) => update(job.id, { progress: 0.02 + 0.13 * p }));
+    update(job.id, { step: "Script", progress: 0.15 });
+    brief = await writeBrief(card, coverPath(video), opts, log, analysis);
+    // Images clés copiées à côté du rendu pour l'interface.
+    const frameUrls: string[] = [];
+    analysis.frames.forEach((f, i) => {
+      const dest = path.join(jobDir, `source-frame-${i}.jpg`);
+      try {
+        fs.copyFileSync(f, dest);
+        frameUrls.push(`/public/${relDir}/source-frame-${i}.jpg`);
+      } catch {
+        // image manquante : on l'ignore
+      }
+    });
+    brief.analysis = { frames: frameUrls, transcript: analysis.transcript, transcriptSource: analysis.transcriptSource, stickers: analysis.stickers };
+    update(job.id, { brief: JSON.stringify(brief), progress: 0.25, step: "Images" });
+  }
 
   const images = await makeImages(brief, jobDir, relDir, imageProvider(opts.images), log, (i, t) =>
     update(job.id, { progress: 0.25 + 0.2 * (i / t) }),

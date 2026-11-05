@@ -61,12 +61,13 @@ Une vidéo de moins de 7 jours est virale si :
 
 ## Recréer cette vidéo
 
-Chaque recréation passe par quatre étapes, visibles dans l'onglet Recréations :
+Chaque recréation passe par cinq étapes, visibles dans l'onglet Recréations :
 
-1. **Analyse et script** (Claude, modèle `NICHE_MODEL`, défaut `claude-opus-5-5`) : la miniature, la légende, les hashtags, la durée et les stats sont envoyées ; le modèle renvoie un brief structuré (pourquoi ça marche, accroche, scènes avec narration, texte à l'écran et visuel, légende, hashtags, palette).
-2. **Images** (`NICHE_IMAGES`) : `none` (fonds typographiques animés), `pexels` (photos libres, clé gratuite) ou `openai` (images générées).
-3. **Voix off** (`NICHE_VOICE`) : `edge` (gratuit, sans clé, donne le minutage de chaque mot pour le karaoké), `openai`, `elevenlabs`, `piper` (local) ou `none`.
-4. **Rendu** : Remotion (`src/video/Niche.tsx`), 30 i/s, H.264. Le MP4 arrive dans `data/renders/` et se lit ou se télécharge depuis l'interface.
+1. **Analyse de la vidéo source** : le fichier est téléchargé depuis TikTok, découpé en images clés (ffmpeg embarqué), et la transcription vient des sous-titres automatiques TikTok (ou de Whisper si `OPENAI_API_KEY` est renseignée et que TikTok n'en a pas). Le texte incrusté à l'écran est lu aussi. Le tout est gardé dans `data/analysis/`.
+2. **Script** (Claude, modèle `NICHE_MODEL`, défaut `claude-opus-5-5`) : images clés, transcription, texte incrusté, légende, hashtags, durée et stats sont envoyés ; le modèle décrit d'abord ce qui se passe dans la source et son mécanisme, puis renvoie une variante au même mécanisme (accroche, scènes avec narration, texte à l'écran et visuel, légende, hashtags, palette). Un sketch joué par des personnes est marqué « tournage » : les scènes deviennent un script à filmer, et la vidéo rendue sert de maquette.
+3. **Images** (`NICHE_IMAGES`) : `none` (fonds typographiques animés), `pexels` (photos libres, clé gratuite) ou `openai` (images générées).
+4. **Voix off** (`NICHE_VOICE`) : `edge` (gratuit, sans clé, donne le minutage de chaque mot pour le karaoké), `openai`, `elevenlabs`, `piper` (local) ou `none`.
+5. **Rendu** : Remotion (`src/video/Niche.tsx`), 30 i/s, H.264. Le MP4 arrive dans `data/renders/` et se lit ou se télécharge depuis l'interface.
 
 Depuis la fiche d'une recréation : copier la légende et les hashtags, refaire le rendu avec le même script, ou demander un nouveau script. La musique de fond se choisit parmi les fichiers déposés dans `data/public/music/` (vérifier la licence de ce qu'on y met).
 

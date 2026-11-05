@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { api, timeAgo, type Brief, type Job } from "../api";
 
-const STEPS = ["Analyse et script", "Images", "Voix off", "Rendu vidéo", "Terminé"];
+const STEPS = ["Analyse de la vidéo source", "Script", "Images", "Voix off", "Rendu vidéo", "Terminé"];
 
 export const JobsPanel: React.FC<{ jobs: Job[]; reload: () => void; notify: (m: string) => void }> = ({ jobs, reload, notify }) => {
   const [open, setOpen] = useState<number | null>(null);
@@ -103,6 +103,38 @@ const JobRow: React.FC<{ job: Job; open: boolean; toggle: () => void; reload: ()
           <div className="space-y-3 text-sm">
             {brief ? (
               <>
+                {brief.mode === "tournage" ? (
+                  <div className="rounded-xl border border-amber-700 bg-amber-500/10 p-3 text-amber-200">
+                    <div className="font-semibold">🎬 Sketch à tourner</div>
+                    <p className="text-sm">
+                      La source est jouée par des personnes : Niche te donne le script à filmer, plan par plan. La vidéo rendue ci-contre est une maquette (voix + texte) pour caler le rythme.
+                    </p>
+                    {brief.shootingTips ? <p className="mt-1 text-sm text-amber-100">{brief.shootingTips}</p> : null}
+                  </div>
+                ) : null}
+                {brief.sourceSummary ? (
+                  <div className="rounded-xl border border-zinc-800 p-3">
+                    <div className="text-xs uppercase tracking-wide text-zinc-500">Ce qui se passe dans la vidéo source</div>
+                    {brief.analysis?.frames.length ? (
+                      <div className="my-2 flex gap-1 overflow-x-auto">
+                        {brief.analysis.frames.map((f) => (
+                          <img key={f} src={f} alt="" className="h-28 w-16 flex-none rounded object-cover" />
+                        ))}
+                      </div>
+                    ) : null}
+                    <p className="text-zinc-300">{brief.sourceSummary}</p>
+                    {brief.mechanism ? <p className="mt-1 text-sm text-zinc-400">Mécanisme : {brief.mechanism}</p> : null}
+                    {brief.analysis?.stickers.length ? <p className="mt-1 text-xs text-zinc-500">Texte incrusté : {brief.analysis.stickers.map((t) => `« ${t} »`).join(" / ")}</p> : null}
+                    {brief.analysis?.transcript ? (
+                      <details className="mt-1">
+                        <summary className="cursor-pointer text-xs text-zinc-500">Transcription ({brief.analysis.transcriptSource === "tiktok" ? "sous-titres TikTok" : "Whisper"})</summary>
+                        <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap text-xs text-zinc-400">{brief.analysis.transcript}</pre>
+                      </details>
+                    ) : (
+                      <p className="mt-1 text-xs text-zinc-500">Pas de transcription pour cette vidéo (pas de sous-titres TikTok ; mettre OPENAI_API_KEY pour Whisper).</p>
+                    )}
+                  </div>
+                ) : null}
                 <div className="rounded-xl border border-zinc-800 p-3">
                   <div className="text-xs uppercase tracking-wide text-zinc-500">Pourquoi la source marche</div>
                   <p className="text-zinc-300">{brief.whyItWorks}</p>

@@ -5,6 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import type { VideoCard } from "../metrics.js";
+import type { SourceAnalysis } from "./analyze.js";
 
 export const SceneSchema = z.object({
   narration: z.string().describe("Texte lu par la voix off, 1 à 3 phrases courtes"),
@@ -15,6 +16,13 @@ export const SceneSchema = z.object({
 });
 
 export const BriefSchema = z.object({
+  sourceSummary: z
+    .string()
+    .describe("Ce qui se passe dans la vidéo source, plan par plan, avec la chute ou le ressort comique, en 4 à 8 phrases"),
+  mechanism: z.string().describe("Le mécanisme qui fait marcher la vidéo (type de blague, structure, rythme), en 1 ou 2 phrases"),
+  mode: z
+    .enum(["auto", "tournage"])
+    .describe("auto si la vidéo peut se rendre en images, texte et voix off ; tournage si c'est un sketch joué par des personnes à filmer"),
   language: z.string().describe("Code langue ISO 639-1 de la vidéo (es, en, fr...)"),
   niche: z.string().describe("La niche en 2 à 5 mots"),
   format: z.string().describe("Le format repéré (ex : histoire triste IA en 3 actes, astuce rapide, fait choquant)"),
@@ -23,6 +31,7 @@ export const BriefSchema = z.object({
   title: z.string().describe("Titre court de la nouvelle vidéo"),
   scenes: z.array(SceneSchema).describe("Entre 4 et 9 scènes, chronologiques"),
   cta: z.string().describe("Appel à l'action final, une phrase"),
+  shootingTips: z.string().describe("Si mode tournage : comment filmer (cadrage, acteurs, accessoires, durée de chaque plan). Sinon vide"),
   caption: z.string().describe("Légende prête à coller, sans hashtags"),
   hashtags: z.array(z.string()).describe("8 à 15 hashtags sans le #"),
   style: z.object({
@@ -45,8 +54,17 @@ const SYSTEM = `Tu es un créateur de contenu court (TikTok, Reels, Shorts) qui 
 et en écrit une nouvelle version : même niche, même format, même structure et même rythme,
 mais une histoire ou un angle différent, pour que la nouvelle vidéo soit originale et non une copie.
 
+Tu reçois ce qui existe de la vidéo source : images clés dans l'ordre, transcription (ce qui est dit),
+texte incrusté à l'écran, légende, hashtags, stats. Commence par comprendre précisément ce qui se passe
+et pourquoi ça fait rire ou retient l'attention, puis réinvente une version qui garde EXACTEMENT le même
+mécanisme (même type de blague ou de tension, même structure, même rythme, même longueur, même ton,
+même genre de personnages et de décor) avec une situation nouvelle.
+
 Règles :
-- Tu écris dans la langue de la vidéo source, sauf consigne contraire.
+- Tu écris dans la langue parlée dans la vidéo source (transcription), sauf consigne contraire.
+- Si la source est un sketch joué par des gens (dialogues, mimiques, situation filmée), mode = tournage :
+  les scènes décrivent ce qu'il faut filmer et dire, plan par plan, comme un script à tourner.
+- Si la source est une histoire racontée, un texte sur fond, une animation, un montage d'images, mode = auto.
 - L'accroche (hook) tient en moins de 10 mots et crée une tension ou une curiosité immédiate.
 - Chaque scène a un texte lu (narration) naturel, parlé, sans jargon, et un texte à l'écran très court.
 - La somme des durées des scènes doit être proche de la durée visée.
@@ -60,7 +78,13 @@ function fmt(n: number | null | undefined) {
   return new Intl.NumberFormat("fr-FR").format(Math.round(n));
 }
 
-export async function writeBrief(card: VideoCard, coverPath: string | null, opts: BriefOptions, log: (l: string) => void): Promise<Brief> {
+export async function writeBrief(
+  card: VideoCard,
+  coverPath: string | null,
+  opts: BriefOptions,
+  log: (l: string) => void,
+  analysis?: SourceAnalysis,
+): Promise<Brief> {
   const workspace = process.env.ANTHROPIC_WORKSPACE_ID;
   const client = new Anthropic(workspace ? { defaultHeaders: { "anthropic-workspace-id": workspace } } : {});
   const model = process.env.NICHE_MODEL || "claude-opus-5-5";
@@ -86,7 +110,14 @@ export async function writeBrief(card: VideoCard, coverPath: string | null, opts
     .join("\n");
 
   const content: Anthropic.ContentBlockParam[] = [];
-  if (coverPath && fs.existsSync(coverPath) && !coverPath.endsWith(".svg")) {
+  const frames = analysis?.frames.filter((f) => fs.existsSync(f)) ?? [];
+  if (frames.length) {
+    content.push({ type: "text", text: `Images clés de la vidéo source, dans l'ordre (${frames.length} sur ${Math.round(analysis?.durationS ?? 0)} s) :` });
+    frames.forEach((f, i) => {
+      content.push({ type: "text", text: `Image ${i + 1} (vers ${analysis?.frameTimes[i] ?? "?"} s) :` });
+      content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: fs.readFileSync(f).toString("base64") } });
+    });
+  } else if (coverPath && fs.existsSync(coverPath) && !coverPath.endsWith(".svg")) {
     const ext = coverPath.split(".").pop()?.toLowerCase();
     const media = ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
     content.push({
@@ -94,9 +125,15 @@ export async function writeBrief(card: VideoCard, coverPath: string | null, opts
       source: { type: "base64", media_type: media, data: fs.readFileSync(coverPath).toString("base64") },
     });
   }
+  const extra = [
+    analysis?.transcript ? `Transcription de la vidéo source (${analysis.transcriptSource === "tiktok" ? "sous-titres automatiques" : "Whisper"}) :\n${analysis.transcript}` : "Pas de transcription disponible : appuie-toi sur les images, le texte incrusté et la légende.",
+    analysis?.stickers.length ? `Texte incrusté à l'écran : ${analysis.stickers.map((t) => `« ${t} »`).join(" / ")}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
   content.push({
     type: "text",
-    text: `Voici la vidéo source à analyser puis à réinventer.\n\n${facts}\n\n${instructions}\n\nRends le brief complet.`,
+    text: `Voici la vidéo source à analyser puis à réinventer.\n\n${facts}\n\n${extra}\n\n${instructions}\n\nRends le brief complet.`,
   });
 
   log(`script : appel ${model}`);

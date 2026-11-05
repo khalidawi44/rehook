@@ -2,11 +2,9 @@
 // aussi le minutage de chaque mot, utilisé pour les sous-titres karaoké.
 import fs from "node:fs";
 import path from "node:path";
-import { execFile, spawn } from "node:child_process";
-import { promisify } from "node:util";
+import { spawn } from "node:child_process";
 import type { Brief } from "./brief.js";
-
-const execFileP = promisify(execFile);
+import { mediaDuration } from "../media.js";
 
 export type VoiceProvider = "none" | "edge" | "openai" | "elevenlabs" | "piper";
 
@@ -36,15 +34,7 @@ const EDGE_VOICES: Record<string, { female: string; male: string }> = {
   ja: { female: "ja-JP-NanamiNeural", male: "ja-JP-KeitaNeural" },
 };
 
-export async function audioDuration(file: string): Promise<number | null> {
-  try {
-    const { stdout } = await execFileP("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file]);
-    const d = parseFloat(stdout.trim());
-    return Number.isFinite(d) ? d : null;
-  } catch {
-    return null;
-  }
-}
+export const audioDuration = mediaDuration;
 
 /** Minutage approximatif quand le fournisseur ne donne pas les mots. */
 export function spreadWords(text: string, durationS: number, lead = 0.15): Word[] {
