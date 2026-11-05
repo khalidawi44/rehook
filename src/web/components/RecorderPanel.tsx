@@ -263,7 +263,11 @@ export const RecorderPanel: React.FC<{ notify: (m: string) => void }> = ({ notif
   return (
     <div className="my-4 grid gap-4 lg:grid-cols-[1fr_340px]">
       <div className="space-y-3">
-        {!supported ? <p className="rounded-lg bg-red-500/10 p-3 text-sm text-red-300">Ce navigateur ne permet pas la capture d'écran. Utilise Chrome ou Edge.</p> : null}
+        {!supported ? (
+          <p className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-200">
+            La capture d'écran du navigateur n'existe pas sur téléphone (ni sur Firefox). Sur iPhone et Android, utilise l'enregistreur d'écran du système, puis importe la vidéo dans l'onglet Montage (« Importer une vidéo »). Sur PC : Chrome ou Edge.
+          </p>
+        ) : null}
         <div className="flex flex-wrap items-center gap-2 text-sm">
           {!stream ? (
             <button onClick={pickScreen} disabled={!supported} className="rounded-lg bg-green-500 px-4 py-2 font-semibold text-black hover:bg-green-400 disabled:opacity-50">

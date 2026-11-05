@@ -48,6 +48,9 @@ export type Stats = {
   nextRefresh: number | null;
   now: number;
   unseenAlerts: number;
+  lanUrls: string[];
+  appPort: number;
+  devPort: number | null;
   settings: Settings;
   run: {
     running: boolean;

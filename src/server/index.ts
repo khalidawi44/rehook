@@ -1,5 +1,6 @@
 // API Niche + fichiers statiques (interface compilée, miniatures, rendus).
 import "./env.js";
+import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
 import express from "express";
@@ -38,9 +39,23 @@ const asyncRoute =
 
 // ---- Tableau de bord ---------------------------------------------------------
 
-app.get("/api/stats", (_req, res) => {
+function lanUrls(port: number): string[] {
+  const out: string[] = [];
+  for (const list of Object.values(os.networkInterfaces())) {
+    for (const i of list ?? []) {
+      if (i.family === "IPv4" && !i.internal) out.push(`http://${i.address}:${port}`);
+    }
+  }
+  return out;
+}
+
+app.get("/api/stats", (req, res) => {
+  const port = Number(process.env.PORT ?? 3001);
   res.json({
     ...stats(),
+    lanUrls: lanUrls(port),
+    appPort: port,
+    devPort: req.get("host")?.includes(":5173") ? 5173 : null,
     unseenAlerts: unseenCount(),
     settings: getSettings(),
     run: runState,

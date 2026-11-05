@@ -7,7 +7,7 @@ export const Modal: React.FC<{ title: React.ReactNode; onClose: () => void; wide
     return () => window.removeEventListener("keydown", h);
   }, [onClose]);
   return (
-    <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/70 p-4 pt-10" onClick={onClose}>
+    <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/70 p-2 pt-4 sm:p-4 sm:pt-10" onClick={onClose}>
       <div
         className={`w-full ${wide ? "max-w-5xl" : "max-w-2xl"} rounded-2xl border border-zinc-800 bg-zinc-950 shadow-2xl`}
         onClick={(e) => e.stopPropagation()}
@@ -18,7 +18,7 @@ export const Modal: React.FC<{ title: React.ReactNode; onClose: () => void; wide
             ✕
           </button>
         </div>
-        <div className="p-5">{children}</div>
+        <div className="p-3 sm:p-5">{children}</div>
       </div>
     </div>
   );

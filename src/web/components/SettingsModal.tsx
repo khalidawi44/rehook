@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import QRCode from "qrcode";
 import { api, type Pack, type Settings, type Stats } from "../api";
 import { Field, Modal, inputCls } from "./Modal";
 
@@ -8,6 +9,12 @@ export const SettingsModal: React.FC<{ stats: Stats | null; onClose: () => void;
   const [keywords, setKeywords] = useState("");
   const [packs, setPacks] = useState<Pack[]>([]);
   const [busy, setBusy] = useState(false);
+  const [qr, setQr] = useState<Record<string, string>>({});
+  const phoneUrls = (stats?.lanUrls ?? []).map((u) => (stats?.devPort ? u.replace(/:\d+$/, ":" + stats.devPort) : u));
+  useEffect(() => {
+    phoneUrls.forEach((u) => QRCode.toDataURL(u, { margin: 1, width: 160, color: { dark: "#ffffff", light: "#00000000" } }).then((d) => setQr((q) => ({ ...q, [u]: d }))).catch(() => {}));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phoneUrls.join("|")]);
   useEffect(() => {
     api.settings().then((x) => {
       setS(x);
@@ -105,6 +112,24 @@ export const SettingsModal: React.FC<{ stats: Stats | null; onClose: () => void;
             ))}
           </div>
         ) : null}
+        <div className="rounded-xl border border-zinc-800 p-3">
+          <div className="mb-1 text-sm font-medium text-zinc-200">📱 Sur le téléphone (même Wi-Fi)</div>
+          {phoneUrls.length ? (
+            <div className="flex flex-wrap gap-4">
+              {phoneUrls.map((u) => (
+                <div key={u} className="text-center text-xs">
+                  {qr[u] ? <img src={qr[u]} alt="" className="mx-auto h-40 w-40" /> : null}
+                  <a href={u} className="text-green-400 hover:underline">{u}</a>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-zinc-500">Aucune adresse réseau trouvée.</p>
+          )}
+          <p className="mt-2 text-xs text-zinc-500">
+            Scanne le code avec l'appareil photo du téléphone, puis « Ajouter à l'écran d'accueil » (bouton Partager sur iPhone, menu ⋮ sur Android) : Niche s'ouvre en plein écran avec son icône. Le PC doit rester allumé avec Niche lancé. Si rien ne s'affiche, autorise Node.js dans le pare-feu Windows (réseau privé).
+          </p>
+        </div>
         <div className="rounded-xl border border-zinc-800 p-3 text-xs text-zinc-400">
           <div className="mb-1 font-medium text-zinc-300">Fournisseurs (fichier .env)</div>
           <div>Découverte : {stats?.providers.discovery} · Images : {stats?.providers.images} · Voix : {stats?.providers.voice} · Script : {stats?.providers.anthropic ? "clé Anthropic présente" : "clé Anthropic absente"}</div>

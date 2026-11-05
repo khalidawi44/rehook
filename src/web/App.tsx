@@ -140,7 +140,7 @@ export const App: React.FC = () => {
   return (
     <div className="min-h-screen pb-20">
       <header className="sticky top-0 z-20 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-4 px-4 py-3">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-2 px-3 py-2 sm:gap-4 sm:px-4 sm:py-3">
           <div className="flex items-center gap-2">
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-green-500 text-lg font-black text-black">N</span>
             <span className="text-xl font-bold tracking-tight">Niche</span>
@@ -152,10 +152,12 @@ export const App: React.FC = () => {
           </div>
           <div className="ml-auto flex items-center gap-2">
             <button onClick={() => setShowImport(true)} className="rounded-lg border border-zinc-700 px-3 py-2 text-sm hover:bg-zinc-800">
-              + Importer une URL
+              <span className="sm:hidden">+ URL</span>
+              <span className="hidden sm:inline">+ Importer une URL</span>
             </button>
-            <button onClick={() => setShowSettings(true)} className="rounded-lg border border-zinc-700 px-3 py-2 text-sm hover:bg-zinc-800">
-              Réglages
+            <button onClick={() => setShowSettings(true)} className="rounded-lg border border-zinc-700 px-3 py-2 text-sm hover:bg-zinc-800" aria-label="Réglages">
+              <span className="sm:hidden">⚙️</span>
+              <span className="hidden sm:inline">Réglages</span>
             </button>
             <button
               onClick={refresh}
@@ -166,7 +168,7 @@ export const App: React.FC = () => {
             </button>
           </div>
         </div>
-        <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 pb-2 text-xs text-zinc-400">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-2 px-3 pb-2 text-xs text-zinc-400 sm:px-4">
           <span className={`h-2 w-2 rounded-full ${stats?.run.running ? "animate-pulse bg-amber-400" : "bg-green-500"}`} />
           {stats?.run.running ? (
             <span>Relevé en cours : {stats.run.step || "démarrage"}</span>
@@ -193,8 +195,8 @@ export const App: React.FC = () => {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 pt-4">
-        <nav className="flex flex-wrap items-center gap-1 border-b border-zinc-800 text-sm">
+      <main className="mx-auto max-w-7xl px-3 pt-3 sm:px-4 sm:pt-4">
+        <nav className="scrollbar-thin -mx-3 flex items-center gap-1 overflow-x-auto whitespace-nowrap border-b border-zinc-800 px-3 text-sm sm:mx-0 sm:flex-wrap sm:px-0">
           <TabBtn active={tab === "viral"} onClick={() => setTab("viral")}>
             🔥 Viral <Count n={stats?.viralAll} />
           </TabBtn>

@@ -417,7 +417,7 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
           <>
             {libTab === "videos" ? <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtrer" className={inputCls} /> : null}
             <label className="block cursor-pointer rounded-lg border border-dashed border-zinc-700 p-2 text-center text-xs text-zinc-400 hover:bg-zinc-800">
-              {uploading ? "Import en cours…" : "+ Importer une vidéo de mon PC"}
+              {uploading ? "Import en cours…" : "+ Importer une vidéo (PC ou téléphone)"}
               <input type="file" accept="video/*" className="hidden" disabled={uploading} onChange={(e) => e.target.files?.[0] && uploadVideo(e.target.files[0])} />
             </label>
             <ul className="scrollbar-thin max-h-[520px] space-y-1 overflow-y-auto text-sm">
@@ -443,7 +443,7 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
       {/* Aperçu, timeline, outils */}
       <div className="min-w-0 space-y-3">
         <div className="grid gap-3 lg:grid-cols-[auto_1fr]">
-          <div className="relative mx-auto rounded-xl border border-zinc-800 bg-black" style={{ height: 420, aspectRatio: `${out.w} / ${out.h}` }}>
+          <div className="relative mx-auto max-w-full rounded-xl border border-zinc-800 bg-black" style={{ height: 420, maxHeight: "60vh", aspectRatio: `${out.w} / ${out.h}` }}>
             <video ref={videoRef} playsInline className="h-full w-full rounded-xl" style={{ objectFit: fit }} />
             <audio ref={musicRef} src={musicSel ? music.find((m) => m.file === musicSel)?.url : undefined} loop />
             {activeCue ? (

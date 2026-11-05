@@ -77,6 +77,10 @@ Depuis la fiche d'une recréation : copier la légende et les hashtags, refaire 
 
 Pour retoucher le rendu à l'œil : `npm run remotion:studio`.
 
+## Sur le téléphone (iPhone et Android)
+
+Niche est une PWA : même interface, même style. Réglages → « Sur le téléphone » affiche un QR code avec l'adresse du PC sur le Wi-Fi ; on le scanne, puis « Ajouter à l'écran d'accueil » (Partager sur iPhone, menu ⋮ sur Android) installe Niche en plein écran avec son icône. Le PC doit rester allumé avec Niche lancé ; si la page ne s'ouvre pas, autoriser Node.js dans le pare-feu Windows (réseau privé). Tout fonctionne depuis le téléphone (veille, alertes, lecteur, recréation, montage) sauf l'enregistreur d'écran du navigateur, remplacé par celui du système puis un import. Pour un accès hors de la maison : déployer le serveur sur un VPS ou passer par un tunnel (Tailscale).
+
 ## Lecteur intégré
 
 La fiche d'une vidéo (clic sur une carte, bouton « Voir » d'une alerte) lit la vidéo d'origine dans Niche : c'est le fichier mp4 que TikTok sert, donc sans les sous-titres ajoutés par le lecteur TikTok (seuls restent les textes incrustés par le créateur dans l'image). Le fichier est téléchargé une fois dans `data/analysis/<id>/` et resservi ensuite (`/api/videos/:id/media`). La fiche d'une recréation montre aussi l'original à côté du résultat.
