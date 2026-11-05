@@ -9,6 +9,7 @@ import { writeBrief, type Brief, type BriefOptions } from "./brief.js";
 import { analyzeSource, type SourceAnalysis } from "./analyze.js";
 import { imageProvider, makeImages } from "./images.js";
 import { findStockClips } from "./stock.js";
+import { capturePath } from "../captures.js";
 import { makeVoices, voiceProvider } from "./voice.js";
 import { renderVideo } from "./render.js";
 import type { NicheProps } from "../../video/types.js";
@@ -22,6 +23,7 @@ export type JobOptions = BriefOptions & {
   captionStyle?: "karaoke" | "block";
   handle?: string; // signature affichée en fin de vidéo
   reuseBrief?: boolean; // regénérer seulement la vidéo à partir du brief existant
+  backgroundCapture?: string | null; // id d'un enregistrement d'écran utilisé en fond des scènes sans clip
 };
 
 function update(id: number, patch: Partial<Pick<JobRow, "status" | "step" | "progress" | "brief" | "output_file" | "error">>, logLine?: string) {
@@ -155,20 +157,37 @@ async function runJob(job: JobRow) {
   update(job.id, { progress: 0.65, step: "Rendu vidéo" });
 
   const music = opts.music && fs.existsSync(path.join(PUBLIC_DIR, "music", opts.music)) ? `music/${opts.music}` : null;
+  const background = opts.backgroundCapture ? capturePath(opts.backgroundCapture) : null;
+  if (opts.backgroundCapture && !background) log("fond : enregistrement introuvable, ignoré");
+  if (background) log(`fond : enregistrement d'écran (${Math.round(background.durationS)} s) sur les scènes sans clip`);
+  let bgOffset = 0;
   const props: NicheProps = {
     title: brief.title,
     hook: brief.hook,
     language: brief.language,
-    scenes: brief.scenes.map((s, i) => ({
-      onScreen: s.onScreen,
-      narration: s.narration,
-      image: images[i],
-      video: clips[i]?.rel ?? null,
-      videoDurationS: clips[i]?.durationS ?? null,
-      audio: voices[i].file,
-      durationS: voices[i].file ? voices[i].durationS + 0.35 : voices[i].durationS,
-      words: voices[i].words,
-    })),
+    scenes: brief.scenes.map((s, i) => {
+      const durationS = voices[i].file ? voices[i].durationS + 0.35 : voices[i].durationS;
+      let video = clips[i]?.rel ?? null;
+      let videoDurationS = clips[i]?.durationS ?? null;
+      let videoStartS = 0;
+      if (!video && background && background.durationS > 1) {
+        video = background.rel;
+        videoStartS = bgOffset % background.durationS;
+        videoDurationS = background.durationS - videoStartS;
+        bgOffset += durationS;
+      }
+      return {
+        onScreen: s.onScreen,
+        narration: s.narration,
+        image: images[i],
+        video,
+        videoDurationS,
+        videoStartS,
+        audio: voices[i].file,
+        durationS,
+        words: voices[i].words,
+      };
+    }),
     cta: brief.cta,
     handle: opts.handle || "",
     palette: brief.style.palette.length >= 3 ? brief.style.palette.slice(0, 3) : ["#0f0a1f", "#a855f7", "#f472b6"],

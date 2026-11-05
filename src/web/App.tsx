@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { api, fmtClock, fmtNum, timeAgo, type Alert, type Job, type Stats, type VideoCard as Card } from "./api";
 import { AlertsPanel } from "./components/AlertsPanel";
+import { RecorderPanel } from "./components/RecorderPanel";
 import { VideoCard } from "./components/VideoCard";
 import { VideoModal } from "./components/VideoModal";
 import { RecreateModal } from "./components/RecreateModal";
@@ -9,7 +10,7 @@ import { AccountsPanel } from "./components/AccountsPanel";
 import { SettingsModal } from "./components/SettingsModal";
 import { ImportModal } from "./components/ImportModal";
 
-type Tab = "viral" | "all" | "accounts" | "jobs" | "alerts";
+type Tab = "viral" | "all" | "accounts" | "jobs" | "alerts" | "recorder";
 
 const PERIODS = [
   { k: "24h", l: "24 h" },
@@ -205,6 +206,9 @@ export const App: React.FC = () => {
           <TabBtn active={tab === "alerts"} onClick={() => { setTab("alerts"); api.alertsSeen().then(loadStats).catch(() => {}); }}>
             🚨 Alertes {stats?.unseenAlerts ? <span className="ml-1 rounded-full bg-red-500 px-2 text-xs font-bold text-white">{stats.unseenAlerts}</span> : <Count n={alerts.length} />}
           </TabBtn>
+          <TabBtn active={tab === "recorder"} onClick={() => setTab("recorder")}>
+            🎥 Enregistreur
+          </TabBtn>
           <TabBtn active={tab === "jobs"} onClick={() => setTab("jobs")}>
             🎬 Recréations {activeJobs ? <span className="ml-1 rounded-full bg-green-500 px-2 text-xs font-bold text-black">{activeJobs}</span> : <Count n={jobs.length} />}
           </TabBtn>
@@ -299,6 +303,7 @@ export const App: React.FC = () => {
 
         {tab === "accounts" ? <AccountsPanel notify={notify} onChanged={loadStats} /> : null}
         {tab === "jobs" ? <JobsPanel jobs={jobs} reload={loadJobs} notify={notify} /> : null}
+        {tab === "recorder" ? <RecorderPanel notify={notify} /> : null}
         {tab === "alerts" ? (
           <AlertsPanel
             alerts={alerts}

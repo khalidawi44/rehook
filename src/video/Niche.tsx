@@ -201,7 +201,12 @@ const Scene: React.FC<{ scene: SceneProps; palette: string[]; index: number; cap
       {scene.video ? (
         <AbsoluteFill style={{ transform: `scale(${interpolate(frame, [0, durationInFrames], [1, 1.06])})` }}>
           <Loop durationInFrames={Math.max(fps, Math.round((scene.videoDurationS ?? 5) * fps))}>
-            <OffthreadVideo src={staticFile(scene.video)} muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            <OffthreadVideo
+              src={staticFile(scene.video)}
+              startFrom={Math.round((scene.videoStartS ?? 0) * fps)}
+              muted
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
           </Loop>
         </AbsoluteFill>
       ) : scene.image ? (

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { api, type JobOptions, type VideoCard } from "../api";
+import { api, type Capture, type JobOptions, type VideoCard } from "../api";
 import { Field, Modal, inputCls } from "./Modal";
 
 const LANGS = [
@@ -22,12 +22,15 @@ export const RecreateModal: React.FC<{ card: VideoCard; onClose: () => void; onQ
     images: "",
     voice: "",
     music: null,
+    backgroundCapture: null,
   });
   const [music, setMusic] = useState<string[]>([]);
+  const [captures, setCaptures] = useState<Capture[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     api.music().then(setMusic).catch(() => {});
+    api.captures().then(setCaptures).catch(() => {});
   }, []);
   const set = <K extends keyof JobOptions>(k: K, v: JobOptions[K]) => setOpts((o) => ({ ...o, [k]: v }));
 
@@ -106,6 +109,16 @@ export const RecreateModal: React.FC<{ card: VideoCard; onClose: () => void; onQ
             {music.map((m) => (
               <option key={m} value={m}>
                 {m}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Fond : mon enregistrement d'écran" hint="Pour les scènes sans clip (onglet Enregistreur)">
+          <select value={opts.backgroundCapture ?? ""} onChange={(e) => set("backgroundCapture", e.target.value || null)} className={inputCls}>
+            <option value="">Aucun</option>
+            {captures.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({Math.round(c.durationS)} s)
               </option>
             ))}
           </select>

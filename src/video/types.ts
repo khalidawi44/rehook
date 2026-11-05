@@ -6,7 +6,8 @@ export type SceneProps = {
   narration: string;
   image: string | null; // chemin relatif au dossier public (staticFile)
   video: string | null; // clip libre de droits (muet), prioritaire sur l'image
-  videoDurationS: number | null;
+  videoDurationS: number | null; // durée lisible à partir de videoStartS
+  videoStartS?: number; // décalage de départ dans le clip, en secondes
   audio: string | null;
   durationS: number;
   words: Word[];

@@ -9,6 +9,7 @@ import { listCards, stats, toCard, type ListQuery } from "./metrics.js";
 import { discoveryMode, importUrls, log, runCollection, runState, runWatch, scheduleRefresh } from "./collector.js";
 import { listAlerts, markSeen, unseenCount } from "./alerts.js";
 import { listPacks, loadPack } from "./packs/index.js";
+import { deleteCapture, listCaptures, saveCapture } from "./captures.js";
 import { fetchTikTokProfile } from "./providers/tiktok-page.js";
 import { removeDemo, seedDemo } from "./providers/demo.js";
 import { createJob, deleteJob, getJob, listJobs, retryJob } from "./recreate/index.js";
@@ -221,6 +222,7 @@ const JobOptionsSchema = z.object({
   captionStyle: z.enum(["karaoke", "block"]).optional(),
   handle: z.string().max(60).optional(),
   reuseBrief: z.boolean().optional(),
+  backgroundCapture: z.string().nullable().optional(),
 });
 
 app.post("/api/recreate", (req, res) => {
@@ -246,6 +248,20 @@ app.post("/api/jobs/:id/retry", (req, res) => {
   res.json(job);
 });
 app.delete("/api/jobs/:id", (req, res) => res.json({ ok: deleteJob(Number(req.params.id)) }));
+
+// ---- Enregistrements d'écran -------------------------------------------------
+
+app.get("/api/captures", (_req, res) => res.json(listCaptures()));
+app.post(
+  "/api/captures",
+  express.raw({ type: ["video/*", "application/octet-stream"], limit: "2gb" }),
+  asyncRoute(async (req, res) => {
+    const body = req.body as Buffer;
+    if (!body?.length) return void res.status(400).json({ error: "Fichier vide" });
+    res.json(await saveCapture(body, String(req.query.name ?? "")));
+  }),
+);
+app.delete("/api/captures/:id", (req, res) => res.json({ ok: deleteCapture(String(req.params.id)) }));
 
 app.get("/api/music", (_req, res) => {
   const dir = path.join(PUBLIC_DIR, "music");

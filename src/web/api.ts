@@ -71,6 +71,8 @@ export type Alert = {
   video: { id: number; caption: string; url: string; cover: string | null; handle: string };
 };
 
+export type Capture = { id: string; name: string; file: string; url: string; durationS: number; width: number; height: number; createdAt: number };
+
 export type Pack = { name: string; title: string; description: string; accounts: number; hashtags: string[]; videos: number };
 
 export type Account = {
@@ -150,6 +152,7 @@ export type JobOptions = {
   captionStyle?: "karaoke" | "block";
   handle?: string;
   reuseBrief?: boolean;
+  backgroundCapture?: string | null;
 };
 
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
@@ -184,6 +187,14 @@ export const api = {
   alertsSeen: (id?: number) => req<{ unseen: number }>("/api/alerts/seen", { method: "POST", body: JSON.stringify({ id }) }),
   watchNow: () => req<{ started: boolean }>("/api/watch", { method: "POST", body: "{}" }),
   packs: () => req<Pack[]>("/api/packs"),
+  captures: () => req<Capture[]>("/api/captures"),
+  saveCapture: async (blob: Blob, name: string) => {
+    const r = await fetch(`/api/captures?name=${encodeURIComponent(name)}`, { method: "POST", headers: { "Content-Type": "video/webm" }, body: blob });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error((body as { error?: string }).error ?? `Erreur ${r.status}`);
+    return body as Capture;
+  },
+  deleteCapture: (id: string) => req<{ ok: boolean }>(`/api/captures/${id}`, { method: "DELETE" }),
   loadPack: (name: string) => req<{ accounts: number; videos: number; errors: string[] }>(`/api/packs/${name}`, { method: "POST", body: "{}" }),
 };
 
