@@ -8,6 +8,10 @@ Niche est un tableau de bord local (Node 22, React, SQLite) qui :
 
 ## Démarrer
 
+**Windows, en un double-clic** : `niche\Niche.cmd` (clic droit → Envoyer vers → Bureau pour avoir un raccourci). À chaque lancement il met Niche à jour depuis GitHub, installe ce qui manque, construit l'interface, démarre le serveur et ouvre http://localhost:3001. Au premier lancement il ouvre `.env` dans le Bloc-notes pour la clé Anthropic. Fermer la fenêtre arrête Niche. Il faut Node.js 22 ou plus et git.
+
+**À la main (toutes plateformes)** :
+
 ```bash
 cd niche
 npm install
@@ -76,6 +80,10 @@ Pour retoucher le rendu à l'œil : `npm run remotion:studio`.
 ## Lecteur intégré
 
 La fiche d'une vidéo (clic sur une carte, bouton « Voir » d'une alerte) lit la vidéo d'origine dans Niche : c'est le fichier mp4 que TikTok sert, donc sans les sous-titres ajoutés par le lecteur TikTok (seuls restent les textes incrustés par le créateur dans l'image). Le fichier est téléchargé une fois dans `data/analysis/<id>/` et resservi ensuite (`/api/videos/:id/media`). La fiche d'une recréation montre aussi l'original à côté du résultat.
+
+## Montage
+
+Onglet ✂️ Montage : un chutier (vidéos relevées, enregistrements et fichiers importés depuis le PC, recréations), une timeline et un aperçu qui enchaîne les clips. Par clip : début et fin (au curseur avec « Début ici » et « Fin ici », ou en secondes), coupe au curseur, vitesse x0,5 à x2, volume, muet, ordre, duplication, suppression. Export MP4 (ffmpeg embarqué) au format choisi (1080x1920, 1080x1080, 1920x1080 ou libre), recadrage « remplir » ou « tout voir », musique de fond avec volume, fondu de début et de fin ; la progression s'affiche et le fichier se lit et se télécharge dans la colonne Exports (`data/renders/montage-*.mp4`).
 
 ## Enregistreur d'écran
 

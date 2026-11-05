@@ -73,6 +73,15 @@ export type Alert = {
 
 export type Capture = { id: string; name: string; file: string; url: string; durationS: number; width: number; height: number; createdAt: number };
 
+export type ClipSource = { kind: "video" | "capture" | "render"; id: string };
+export type Clip = { source: ClipSource; inS: number; outS: number; mute?: boolean; volume?: number; speed?: number };
+export type MontageSources = {
+  videos: { id: string; name: string; durationS: number | null; cover: string | null; url: string }[];
+  captures: { id: string; name: string; durationS: number; url: string }[];
+  renders: { id: string; name: string; url: string }[];
+};
+export type MontageJob = { id: string; name: string; status: "running" | "done" | "error"; progress: number; url: string | null; error: string | null; createdAt: number; durationS: number };
+
 export type Pack = { name: string; title: string; description: string; accounts: number; hashtags: string[]; videos: number };
 
 export type Account = {
@@ -195,6 +204,11 @@ export const api = {
     return body as Capture;
   },
   deleteCapture: (id: string) => req<{ ok: boolean }>(`/api/captures/${id}`, { method: "DELETE" }),
+  montageSources: () => req<MontageSources>("/api/montage/sources"),
+  montages: () => req<MontageJob[]>("/api/montage"),
+  montage: (id: string) => req<MontageJob>(`/api/montage/${id}`),
+  startMontage: (body: { name?: string; clips: Clip[]; width: number; height: number; fit: "cover" | "contain"; fps?: number; music?: string | null; musicVolume?: number; fadeS?: number }) =>
+    req<MontageJob>("/api/montage", { method: "POST", body: JSON.stringify(body) }),
   loadPack: (name: string) => req<{ accounts: number; videos: number; errors: string[] }>(`/api/packs/${name}`, { method: "POST", body: "{}" }),
 };
 

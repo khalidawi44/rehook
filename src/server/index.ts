@@ -11,6 +11,7 @@ import { listAlerts, markSeen, unseenCount } from "./alerts.js";
 import { listPacks, loadPack } from "./packs/index.js";
 import { deleteCapture, listCaptures, saveCapture } from "./captures.js";
 import { ensureSourceFile } from "./recreate/analyze.js";
+import { getMontage, listMontages, montageSources, startMontage, type MontageRequest } from "./montage.js";
 import { fetchTikTokProfile } from "./providers/tiktok-page.js";
 import { removeDemo, seedDemo } from "./providers/demo.js";
 import { createJob, deleteJob, getJob, listJobs, retryJob } from "./recreate/index.js";
@@ -275,6 +276,44 @@ app.post(
   }),
 );
 app.delete("/api/captures/:id", (req, res) => res.json({ ok: deleteCapture(String(req.params.id)) }));
+
+// ---- Montage -----------------------------------------------------------------
+
+app.get("/api/montage/sources", asyncRoute(async (_req, res) => void res.json(await montageSources())));
+app.get("/api/montage", (_req, res) => res.json(listMontages()));
+app.get("/api/montage/:id", (req, res) => {
+  const j = getMontage(String(req.params.id));
+  if (!j) return res.status(404).json({ error: "Export introuvable" });
+  res.json(j);
+});
+const ClipSchema = z.object({
+  source: z.object({ kind: z.enum(["video", "capture", "render"]), id: z.string() }),
+  inS: z.number().min(0),
+  outS: z.number().min(0),
+  mute: z.boolean().optional(),
+  volume: z.number().min(0).max(4).optional(),
+  speed: z.number().min(0.25).max(4).optional(),
+});
+const MontageSchema = z.object({
+  name: z.string().max(80).optional(),
+  clips: z.array(ClipSchema).min(1).max(60),
+  width: z.number().min(16).max(4096),
+  height: z.number().min(16).max(4096),
+  fit: z.enum(["cover", "contain"]).default("cover"),
+  fps: z.number().min(10).max(60).optional(),
+  music: z.string().nullable().optional(),
+  musicVolume: z.number().min(0).max(2).optional(),
+  fadeS: z.number().min(0).max(5).optional(),
+});
+app.post(
+  "/api/montage",
+  asyncRoute(async (req, res) => {
+    const parsed = MontageSchema.safeParse(req.body);
+    if (!parsed.success) return void res.status(400).json({ error: "Montage invalide : " + parsed.error.issues.map((i) => i.path.join(".") + " " + i.message).join(", ") });
+    if (parsed.data.clips.some((c) => c.outS <= c.inS)) return void res.status(400).json({ error: "Un clip a une fin avant son début" });
+    res.json(await startMontage(parsed.data as MontageRequest));
+  }),
+);
 
 app.get("/api/music", (_req, res) => {
   const dir = path.join(PUBLIC_DIR, "music");
