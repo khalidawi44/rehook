@@ -134,7 +134,7 @@ async function runJob(job: JobRow) {
         .map((f) => path.join(DATA_DIR, "analysis", String(video.id), f))
     : [];
   const clips =
-    provider === "pexels-video"
+    provider === "stock-video"
       ? await findStockClips(brief, jobDir, relDir, sourceFrames, log, (i, t) => update(job.id, { progress: 0.25 + 0.2 * (i / t) }))
       : brief.scenes.map(() => null);
   // Scènes sans clip : une photo libre de droits en secours, sinon fond typographique.
@@ -142,7 +142,7 @@ async function runJob(job: JobRow) {
     brief,
     jobDir,
     relDir,
-    provider === "pexels-video" ? "pexels" : provider,
+    provider === "stock-video" ? (process.env.PEXELS_API_KEY ? "pexels" : "none") : provider,
     log,
     (i, t) => update(job.id, { progress: 0.25 + 0.2 * (i / t) }),
     clips.map((c) => !!c),

@@ -4,13 +4,14 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Brief } from "./brief.js";
 
-export type ImageProvider = "none" | "pexels" | "pexels-video" | "openai";
+export type ImageProvider = "none" | "pexels" | "stock-video" | "openai";
+
+const hasStockKey = () => !!(process.env.PIXABAY_API_KEY || process.env.PEXELS_API_KEY);
 
 export function imageProvider(override?: string): ImageProvider {
-  const p = (override || process.env.NICHE_IMAGES || (process.env.PEXELS_API_KEY ? "pexels-video" : "none")).toLowerCase();
-  if ((p === "pexels-video" || p === "pexels") && !process.env.PEXELS_API_KEY) return "none";
-  if (p === "pexels-video") return "pexels-video";
-  if (p === "pexels") return "pexels";
+  const p = (override || process.env.NICHE_IMAGES || (hasStockKey() ? "stock-video" : "none")).toLowerCase();
+  if (p === "stock-video" || p === "pexels-video" || p === "pixabay-video") return hasStockKey() ? "stock-video" : "none";
+  if (p === "pexels") return process.env.PEXELS_API_KEY ? "pexels" : "none";
   if (p === "openai" && process.env.OPENAI_API_KEY) return "openai";
   return "none";
 }
@@ -71,7 +72,7 @@ export async function makeImages(
   skip: boolean[] = [],
 ): Promise<(string | null)[]> {
   const out: (string | null)[] = [];
-  if (provider === "none" || provider === "pexels-video") {
+  if (provider === "none" || provider === "stock-video") {
     if (provider === "none") log("images : fonds typographiques (aucun fournisseur)");
     return brief.scenes.map(() => null);
   }

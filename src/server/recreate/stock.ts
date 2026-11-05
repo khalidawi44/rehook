@@ -1,6 +1,6 @@
-// Clips vidéo libres de droits (API Pexels Videos) : un clip par scène, choisi
-// parmi les candidats par le modèle à partir des vignettes, pour coller au plan
-// de la vidéo source.
+// Clips vidéo libres de droits (Pixabay et/ou Pexels, selon les clés présentes) :
+// un clip par scène, choisi parmi les candidats par le modèle à partir des
+// vignettes, pour coller au plan de la vidéo source.
 import fs from "node:fs";
 import path from "node:path";
 import Anthropic from "@anthropic-ai/sdk";
@@ -10,33 +10,95 @@ import type { Brief } from "./brief.js";
 
 export type StockClip = { file: string; durationS: number; width: number; height: number; credit: string; url: string };
 
+/** Candidat commun aux fournisseurs. */
+type StockVideo = {
+  id: string;
+  duration: number;
+  thumb: string;
+  url: string;
+  credit: string;
+  files: { link: string; width: number; height: number }[];
+};
+
+type Candidate = { video: StockVideo; query: string };
+
+export function stockProviders(): ("pixabay" | "pexels")[] {
+  const out: ("pixabay" | "pexels")[] = [];
+  if (process.env.PIXABAY_API_KEY) out.push("pixabay");
+  if (process.env.PEXELS_API_KEY) out.push("pexels");
+  return out;
+}
+
 type PexelsVideo = {
   id: number;
   duration: number;
-  width: number;
-  height: number;
   image: string;
   url: string;
   user?: { name?: string };
-  video_files: { id: number; quality: string; file_type: string; width: number | null; height: number | null; link: string }[];
+  video_files: { quality: string; file_type: string; width: number | null; height: number | null; link: string }[];
 };
 
-type Candidate = { video: PexelsVideo; query: string };
-
-async function pexelsSearch(query: string, perPage = 6): Promise<PexelsVideo[]> {
+async function pexelsSearch(query: string, perPage: number): Promise<StockVideo[]> {
   const u = `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&orientation=portrait&size=medium&per_page=${perPage}`;
   const r = await fetch(u, { headers: { Authorization: process.env.PEXELS_API_KEY! } });
   if (!r.ok) throw new Error(`Pexels vidéos a répondu ${r.status}`);
   const j = (await r.json()) as { videos?: PexelsVideo[] };
-  return (j.videos ?? []).filter((v) => v.video_files?.length);
+  return (j.videos ?? [])
+    .filter((v) => v.video_files?.length)
+    .map((v) => ({
+      id: `pexels-${v.id}`,
+      duration: v.duration,
+      thumb: v.image,
+      url: v.url,
+      credit: v.user?.name ? `Vidéo : ${v.user.name} (Pexels)` : "Pexels",
+      files: v.video_files.filter((f) => f.file_type === "video/mp4" && f.width && f.height).map((f) => ({ link: f.link, width: f.width!, height: f.height! })),
+    }));
 }
 
-function bestFile(v: PexelsVideo) {
-  const mp4 = v.video_files.filter((f) => f.file_type === "video/mp4" && f.width && f.height);
-  const portrait = mp4.filter((f) => f.height! > f.width!);
-  const pool = portrait.length ? portrait : mp4;
-  // Le plus proche de 1080 de large sans dépasser 1440 : assez net, pas trop lourd.
-  return pool.sort((a, b) => Math.abs(a.width! - 1080) - Math.abs(b.width! - 1080)).find((f) => f.width! <= 1440) ?? pool[0];
+type PixabayHit = {
+  id: number;
+  duration: number;
+  pageURL: string;
+  user?: string;
+  videos: Record<string, { url: string; width: number; height: number; size: number; thumbnail?: string }>;
+};
+
+async function pixabaySearch(query: string, perPage: number): Promise<StockVideo[]> {
+  const u = `https://pixabay.com/api/videos/?key=${encodeURIComponent(process.env.PIXABAY_API_KEY!)}&q=${encodeURIComponent(query)}&per_page=${Math.max(3, perPage)}&safesearch=true`;
+  const r = await fetch(u);
+  if (!r.ok) throw new Error(`Pixabay a répondu ${r.status} : ${(await r.text()).slice(0, 120)}`);
+  const j = (await r.json()) as { hits?: PixabayHit[] };
+  return (j.hits ?? []).map((h) => {
+    const files = Object.values(h.videos ?? {}).filter((f) => f.url && f.width && f.height);
+    const thumb = h.videos?.medium?.thumbnail ?? h.videos?.small?.thumbnail ?? files[0]?.thumbnail ?? "";
+    return {
+      id: `pixabay-${h.id}`,
+      duration: h.duration,
+      thumb,
+      url: h.pageURL,
+      credit: h.user ? `Vidéo : ${h.user} (Pixabay)` : "Pixabay",
+      files: files.map((f) => ({ link: f.url, width: f.width, height: f.height })),
+    };
+  });
+}
+
+async function searchAll(query: string, perPage: number, log: (l: string) => void): Promise<StockVideo[]> {
+  const out: StockVideo[] = [];
+  for (const p of stockProviders()) {
+    try {
+      out.push(...(p === "pixabay" ? await pixabaySearch(query, perPage) : await pexelsSearch(query, perPage)));
+    } catch (e) {
+      log(`clips « ${query} » (${p}) : ${(e as Error).message}`);
+    }
+  }
+  return out;
+}
+
+function bestFile(v: StockVideo) {
+  const portrait = v.files.filter((f) => f.height > f.width);
+  const pool = portrait.length ? portrait : v.files;
+  // Le plus proche de 1080 de large sans dépasser 1920 : assez net, pas trop lourd.
+  return pool.slice().sort((a, b) => Math.abs(a.width - 1080) - Math.abs(b.width - 1080)).find((f) => f.width <= 1920) ?? pool[0];
 }
 
 const PickSchema = z.object({
@@ -74,7 +136,7 @@ async function pickWithModel(
     content.push({ type: "text", text: `Scène ${i + 1} : « ${scene.onScreen} ». Visuel voulu : ${scene.visual}. Candidats :` });
     for (let c = 0; c < perScene[i].length; c++) {
       content.push({ type: "text", text: `Scène ${i + 1}, clip ${c + 1} (${perScene[i][c].video.duration} s, requête « ${perScene[i][c].query} ») :` });
-      content.push({ type: "image", source: { type: "url", url: perScene[i][c].video.image } });
+      if (perScene[i][c].video.thumb) content.push({ type: "image", source: { type: "url", url: perScene[i][c].video.thumb } });
     }
   }
   content.push({ type: "text", text: "Donne ton choix pour chaque scène. Un clip peut servir pour plusieurs scènes si c'est le plus juste." });
@@ -106,26 +168,22 @@ export async function findStockClips(
   log: (l: string) => void,
   onProgress: (i: number, total: number) => void,
 ): Promise<(({ rel: string } & StockClip) | null)[]> {
-  if (!process.env.PEXELS_API_KEY) {
-    log("clips : PEXELS_API_KEY manquante");
+  if (!stockProviders().length) {
+    log("clips : aucune clé PIXABAY_API_KEY ni PEXELS_API_KEY");
     return brief.scenes.map(() => null);
   }
   const perScene: Candidate[][] = [];
   for (let i = 0; i < brief.scenes.length; i++) {
     const s = brief.scenes[i];
     const queries = [s.stockQuery, ...(s.stockAlternatives ?? []), s.keywords.join(" ")].map((q) => q?.trim()).filter(Boolean) as string[];
-    const seen = new Set<number>();
+    const seen = new Set<string>();
     const cands: Candidate[] = [];
     for (const q of queries) {
       if (cands.length >= 6) break;
-      try {
-        for (const v of await pexelsSearch(q, 5)) {
-          if (seen.has(v.id) || v.duration < 2) continue;
-          seen.add(v.id);
-          cands.push({ video: v, query: q });
-        }
-      } catch (e) {
-        log(`clips scène ${i + 1} « ${q} » : ${(e as Error).message}`);
+      for (const v of await searchAll(q, 5, log)) {
+        if (seen.has(v.id) || v.duration < 2 || !v.files.length) continue;
+        seen.add(v.id);
+        cands.push({ video: v, query: q });
       }
     }
     perScene.push(cands);
@@ -136,7 +194,7 @@ export async function findStockClips(
   const picks = total && perScene.some((c) => c.length > 1) ? await pickWithModel(brief, perScene, sourceFrames, log) : perScene.map(() => 0);
 
   const out: (({ rel: string } & StockClip) | null)[] = [];
-  const downloaded = new Map<number, { rel: string } & StockClip>();
+  const downloaded = new Map<string, { rel: string } & StockClip>();
   for (let i = 0; i < perScene.length; i++) {
     const pick = picks[i] >= 0 ? perScene[i][picks[i]] : undefined;
     if (!pick) {
@@ -161,9 +219,9 @@ export async function findStockClips(
         rel: `${relDir}/${file}`,
         file: path.join(dir, file),
         durationS: pick.video.duration,
-        width: f.width!,
-        height: f.height!,
-        credit: pick.video.user?.name ? `Vidéo : ${pick.video.user.name} (Pexels)` : "Pexels",
+        width: f.width,
+        height: f.height,
+        credit: pick.video.credit,
         url: pick.video.url,
       };
       downloaded.set(pick.video.id, clip);
