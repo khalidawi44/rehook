@@ -109,6 +109,7 @@ export type Brief = {
   mode?: "auto" | "tournage";
   shootingTips?: string;
   analysis?: { frames: string[]; transcript: string | null; transcriptSource: string | null; stickers: string[] };
+  credits?: string[];
   language: string;
   niche: string;
   format: string;

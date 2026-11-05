@@ -12,6 +12,10 @@ export const SceneSchema = z.object({
   onScreen: z.string().describe("Texte affiché à l'écran, 3 à 8 mots, percutant"),
   visual: z.string().describe("Description précise de l'image à générer pour cette scène, style compris"),
   keywords: z.array(z.string()).describe("2 à 4 mots-clés en anglais pour chercher une photo libre de droits"),
+  stockQuery: z
+    .string()
+    .describe("Requête en anglais, 3 à 6 mots, décrivant le plan de banque d'images vidéo qui ressemble le plus à ce que montre la source pour cette scène : lieu, personnes, action, ambiance (ex : two women laughing in car)"),
+  stockAlternatives: z.array(z.string()).describe("2 requêtes de repli en anglais, plus générales, pour le même plan"),
   seconds: z.number().describe("Durée visée de la scène en secondes"),
 });
 
@@ -70,6 +74,9 @@ Règles :
 - La somme des durées des scènes doit être proche de la durée visée.
 - Les descriptions visuelles sont cohérentes entre elles (mêmes personnages, même univers, même style)
   et reprennent le style visuel repéré sur la miniature si elle est fournie.
+- Pour chaque scène, stockQuery décrit le plan réel de la source (regarde les images clés : décor, nombre de
+  personnes, genre, âge approximatif, action, cadrage, lumière) en termes de banque d'images vidéo,
+  pour retrouver un clip libre de droits qui lui ressemble. Concret et filmable, jamais abstrait.
 - Jamais de nom de personne réelle, jamais de marque, jamais de contenu choquant ou trompeur.
 - Pas de tiret long dans les textes. Pas de formules creuses. Court et concret.`;
 

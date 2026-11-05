@@ -4,11 +4,13 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Brief } from "./brief.js";
 
-export type ImageProvider = "none" | "pexels" | "openai";
+export type ImageProvider = "none" | "pexels" | "pexels-video" | "openai";
 
 export function imageProvider(override?: string): ImageProvider {
-  const p = (override || process.env.NICHE_IMAGES || "none").toLowerCase();
-  if (p === "pexels" && process.env.PEXELS_API_KEY) return "pexels";
+  const p = (override || process.env.NICHE_IMAGES || (process.env.PEXELS_API_KEY ? "pexels-video" : "none")).toLowerCase();
+  if ((p === "pexels-video" || p === "pexels") && !process.env.PEXELS_API_KEY) return "none";
+  if (p === "pexels-video") return "pexels-video";
+  if (p === "pexels") return "pexels";
   if (p === "openai" && process.env.OPENAI_API_KEY) return "openai";
   return "none";
 }
@@ -66,14 +68,19 @@ export async function makeImages(
   provider: ImageProvider,
   log: (l: string) => void,
   onProgress: (i: number, total: number) => void,
+  skip: boolean[] = [],
 ): Promise<(string | null)[]> {
   const out: (string | null)[] = [];
-  if (provider === "none") {
-    log("images : fonds typographiques (aucun fournisseur)");
+  if (provider === "none" || provider === "pexels-video") {
+    if (provider === "none") log("images : fonds typographiques (aucun fournisseur)");
     return brief.scenes.map(() => null);
   }
   for (let i = 0; i < brief.scenes.length; i++) {
     const scene = brief.scenes[i];
+    if (skip[i]) {
+      out.push(null);
+      continue;
+    }
     const file = `scene-${i}.${provider === "pexels" ? "jpg" : "png"}`;
     const dest = path.join(dir, file);
     try {

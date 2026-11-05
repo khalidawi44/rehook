@@ -78,8 +78,9 @@ export const RecreateModal: React.FC<{ card: VideoCard; onClose: () => void; onQ
         <Field label="Images des scènes" hint="Vide = réglage du .env (NICHE_IMAGES)">
           <select value={opts.images} onChange={(e) => set("images", e.target.value)} className={inputCls}>
             <option value="">Par défaut</option>
-            <option value="none">Fonds typographiques (sans image)</option>
+            <option value="pexels-video">Clips vidéo libres Pexels (recommandé)</option>
             <option value="pexels">Photos libres Pexels</option>
+            <option value="none">Fonds typographiques (sans image)</option>
             <option value="openai">Images générées (OpenAI)</option>
           </select>
         </Field>

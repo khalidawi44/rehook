@@ -4,10 +4,11 @@ import path from "node:path";
 import { db, now, type AccountRow, type JobRow, type SnapshotRow, type VideoRow } from "../db.js";
 import { toCard } from "../metrics.js";
 import { coverPath } from "../covers.js";
-import { JOBS_PUBLIC_DIR, PUBLIC_DIR } from "../paths.js";
+import { DATA_DIR, JOBS_PUBLIC_DIR, PUBLIC_DIR } from "../paths.js";
 import { writeBrief, type Brief, type BriefOptions } from "./brief.js";
 import { analyzeSource, type SourceAnalysis } from "./analyze.js";
 import { imageProvider, makeImages } from "./images.js";
+import { findStockClips } from "./stock.js";
 import { makeVoices, voiceProvider } from "./voice.js";
 import { renderVideo } from "./render.js";
 import type { NicheProps } from "../../video/types.js";
@@ -124,8 +125,27 @@ async function runJob(job: JobRow) {
     update(job.id, { brief: JSON.stringify(brief), progress: 0.25, step: "Images" });
   }
 
-  const images = await makeImages(brief, jobDir, relDir, imageProvider(opts.images), log, (i, t) =>
-    update(job.id, { progress: 0.25 + 0.2 * (i / t) }),
+  const provider = imageProvider(opts.images);
+  const sourceFrames = fs.existsSync(path.join(DATA_DIR, "analysis", String(video.id)))
+    ? fs
+        .readdirSync(path.join(DATA_DIR, "analysis", String(video.id)))
+        .filter((f) => f.startsWith("frame-"))
+        .sort((a, b) => Number(a.match(/\d+/)?.[0] ?? 0) - Number(b.match(/\d+/)?.[0] ?? 0))
+        .map((f) => path.join(DATA_DIR, "analysis", String(video.id), f))
+    : [];
+  const clips =
+    provider === "pexels-video"
+      ? await findStockClips(brief, jobDir, relDir, sourceFrames, log, (i, t) => update(job.id, { progress: 0.25 + 0.2 * (i / t) }))
+      : brief.scenes.map(() => null);
+  // Scènes sans clip : une photo libre de droits en secours, sinon fond typographique.
+  const images = await makeImages(
+    brief,
+    jobDir,
+    relDir,
+    provider === "pexels-video" ? "pexels" : provider,
+    log,
+    (i, t) => update(job.id, { progress: 0.25 + 0.2 * (i / t) }),
+    clips.map((c) => !!c),
   );
   update(job.id, { progress: 0.45, step: "Voix off" });
 
@@ -143,6 +163,8 @@ async function runJob(job: JobRow) {
       onScreen: s.onScreen,
       narration: s.narration,
       image: images[i],
+      video: clips[i]?.rel ?? null,
+      videoDurationS: clips[i]?.durationS ?? null,
       audio: voices[i].file,
       durationS: voices[i].file ? voices[i].durationS + 0.35 : voices[i].durationS,
       words: voices[i].words,
@@ -156,6 +178,11 @@ async function runJob(job: JobRow) {
     showHookCard: true,
   };
   fs.writeFileSync(path.join(jobDir, "props.json"), JSON.stringify(props, null, 2));
+  const credits = [...new Set(clips.filter(Boolean).map((c) => `${c!.credit} ${c!.url}`))];
+  if (credits.length) {
+    fs.writeFileSync(path.join(jobDir, "credits.txt"), credits.join("\n"));
+    update(job.id, { brief: JSON.stringify({ ...brief, credits }) });
+  }
 
   const file = await renderVideo(job.id, props, log, (p) => update(job.id, { progress: 0.65 + 0.35 * p }));
   update(job.id, { status: "done", step: "Terminé", progress: 1, output_file: file }, "terminé : " + file);

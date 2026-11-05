@@ -5,6 +5,8 @@ export type SceneProps = {
   onScreen: string;
   narration: string;
   image: string | null; // chemin relatif au dossier public (staticFile)
+  video: string | null; // clip libre de droits (muet), prioritaire sur l'image
+  videoDurationS: number | null;
   audio: string | null;
   durationS: number;
   words: Word[];

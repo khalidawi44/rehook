@@ -3,6 +3,8 @@ import {
   AbsoluteFill,
   Audio,
   Img,
+  Loop,
+  OffthreadVideo,
   Sequence,
   continueRender,
   delayRender,
@@ -196,7 +198,13 @@ const Scene: React.FC<{ scene: SceneProps; palette: string[]; index: number; cap
   const title = spring({ frame, fps, config: { damping: 14, stiffness: 120 } });
   return (
     <AbsoluteFill style={{ opacity: fade }}>
-      {scene.image ? (
+      {scene.video ? (
+        <AbsoluteFill style={{ transform: `scale(${interpolate(frame, [0, durationInFrames], [1, 1.06])})` }}>
+          <Loop durationInFrames={Math.max(fps, Math.round((scene.videoDurationS ?? 5) * fps))}>
+            <OffthreadVideo src={staticFile(scene.video)} muted style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          </Loop>
+        </AbsoluteFill>
+      ) : scene.image ? (
         <AbsoluteFill style={{ transform: `scale(${kb}) translateX(${panX}px)` }}>
           <Img src={staticFile(scene.image)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         </AbsoluteFill>

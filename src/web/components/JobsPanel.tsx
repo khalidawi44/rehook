@@ -160,6 +160,16 @@ const JobRow: React.FC<{ job: Job; open: boolean; toggle: () => void; reload: ()
                     ))}
                   </ol>
                   <p className="mt-2 font-medium">Fin : {brief.cta}</p>
+                  {brief.credits?.length ? (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-xs text-zinc-500">Clips utilisés ({brief.credits.length}, licence Pexels)</summary>
+                      <ul className="mt-1 space-y-0.5 text-xs text-zinc-400">
+                        {brief.credits.map((c) => (
+                          <li key={c}>{c}</li>
+                        ))}
+                      </ul>
+                    </details>
+                  ) : null}
                 </div>
                 <div className="rounded-xl border border-zinc-800 p-3">
                   <div className="flex items-center justify-between">
