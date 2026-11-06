@@ -36,3 +36,8 @@ body {
     min-height: 40px;
   }
 }
+
+@font-face { font-family: "Anton"; src: url("/public/fonts/Anton-Regular.ttf"); }
+@font-face { font-family: "Lobster"; src: url("/public/fonts/Lobster-Regular.ttf"); }
+@font-face { font-family: "Permanent Marker"; src: url("/public/fonts/PermanentMarker-Regular.ttf"); }
+@font-face { font-family: "Rubik Spray Paint"; src: url("/public/fonts/RubikSprayPaint-Regular.ttf"); }

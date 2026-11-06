@@ -12,6 +12,8 @@ import { PUBLIC_DIR, RENDERS_DIR } from "./paths.js";
 import { CAPTURES_DIR, listCaptures } from "./captures.js";
 import { ensureSourceFile } from "./recreate/analyze.js";
 import { buildAss, DEFAULT_STYLE, transcribeAudio, wordsToCues, type Cue, type SubtitleStyle, type TextItem } from "./subtitles.js";
+import { coverImage, detectBpm } from "./tools/media-analysis.js";
+import { personCenterX } from "./tools/smartcrop.js";
 
 const execFileP = promisify(execFile);
 
@@ -20,7 +22,7 @@ export type ClipEffect =
   | "zoom-in" | "zoom-out" | "bw" | "warm" | "cold" | "vignette" | "mirror" | "sharpen" | "punch" | "fade-in" | "fade-out" | "blur-bg"
   | "sepia" | "vintage" | "cinematic" | "glow" | "blur" | "pixelate" | "invert" | "shake" | "letterbox" | "flash" | "dream" | "contrast-hard";
 export const CLIP_EFFECTS: ClipEffect[] = ["zoom-in", "zoom-out", "bw", "warm", "cold", "vignette", "mirror", "sharpen", "punch", "fade-in", "fade-out", "blur-bg", "sepia", "vintage", "cinematic", "glow", "blur", "pixelate", "invert", "shake", "letterbox", "flash", "dream", "contrast-hard"];
-export type Clip = { source: ClipSource; inS: number; outS: number; mute?: boolean; volume?: number; speed?: number; effects?: ClipEffect[] };
+export type Clip = { source: ClipSource; inS: number; outS: number; mute?: boolean; volume?: number; speed?: number; effects?: ClipEffect[]; smartCrop?: boolean; cropX?: number | null };
 export type MusicOptions = { file: string; volume?: number; startS?: number; fadeInS?: number; fadeOutS?: number; duck?: boolean };
 export type MontageRequest = {
   name?: string;
@@ -34,6 +36,7 @@ export type MontageRequest = {
   transition?: { type: string; durationS: number } | null;
   subtitles?: { cues: Cue[]; style: Partial<SubtitleStyle> } | null;
   texts?: TextItem[];
+  cover?: { atS: number; title: string } | null;
 };
 
 export type MontageJob = {
@@ -46,6 +49,7 @@ export type MontageJob = {
   error: string | null;
   createdAt: number;
   durationS: number;
+  coverUrl?: string | null;
 };
 
 const jobs = new Map<string, MontageJob>();
@@ -122,10 +126,26 @@ export async function montageSources() {
 export const MUSIC_DIR = path.join(PUBLIC_DIR, "music");
 fs.mkdirSync(MUSIC_DIR, { recursive: true });
 
+function musicMeta(f: string): { bpm?: number | null; durationS?: number | null } {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(MUSIC_DIR, f + ".json"), "utf8"));
+  } catch {
+    return {};
+  }
+}
+
 export async function listMusic() {
   const files = fs.readdirSync(MUSIC_DIR).filter((f) => /\.(mp3|wav|m4a|aac|ogg|flac)$/i.test(f));
-  const out: { file: string; name: string; durationS: number | null; url: string }[] = [];
-  for (const f of files) out.push({ file: f, name: f.replace(/\.[^.]+$/, ""), durationS: await mediaDuration(path.join(MUSIC_DIR, f)), url: `/public/music/${encodeURIComponent(f)}` });
+  const out: { file: string; name: string; durationS: number | null; url: string; bpm: number | null }[] = [];
+  for (const f of files) {
+    let meta = musicMeta(f);
+    if (meta.bpm === undefined) {
+      const full = path.join(MUSIC_DIR, f);
+      meta = { bpm: await detectBpm(full), durationS: await mediaDuration(full) };
+      fs.writeFileSync(full + ".json", JSON.stringify(meta));
+    }
+    out.push({ file: f, name: f.replace(/\.[^.]+$/, ""), durationS: meta.durationS ?? (await mediaDuration(path.join(MUSIC_DIR, f))), url: `/public/music/${encodeURIComponent(f)}`, bpm: meta.bpm ?? null });
+  }
   return out;
 }
 
@@ -148,6 +168,7 @@ export function deleteMusic(file: string): boolean {
   const p = path.join(MUSIC_DIR, path.basename(file));
   if (!fs.existsSync(p)) return false;
   fs.rmSync(p, { force: true });
+  fs.rmSync(p + ".json", { force: true });
   return true;
 }
 
@@ -209,6 +230,10 @@ async function buildGraph(req: MontageRequest, files: string[], audios: boolean[
         scale = `split[bg${i}][fg${i}];[bg${i}]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},boxblur=20:2[bgb${i}];[fg${i}]scale=${W}:${H}:force_original_aspect_ratio=decrease[fgs${i}];[bgb${i}][fgs${i}]overlay=(W-w)/2:(H-h)/2`;
       } else if (req.fit === "contain") {
         scale = `scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black`;
+      } else if (typeof c.cropX === "number") {
+        // Recadrage centré sur les personnes détectées (cropX = centre horizontal 0..1).
+        const cx = Math.max(0, Math.min(1, c.cropX)).toFixed(3);
+        scale = `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H}:x='min(max(${cx}*iw-${W}/2,0),iw-${W})':y='(ih-${H})/2'`;
       } else {
         scale = `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H}`;
       }
@@ -286,7 +311,7 @@ async function buildGraph(req: MontageRequest, files: string[], audios: boolean[
   return { args, filters, vOut, aOut, total };
 }
 
-async function prepare(req: MontageRequest) {
+async function prepare(req: MontageRequest, log: (l: string) => void = () => {}) {
   if (!req.clips.length) throw new Error("Aucun clip");
   const files: string[] = [];
   const audios: boolean[] = [];
@@ -294,6 +319,10 @@ async function prepare(req: MontageRequest) {
     const f = await resolveSource(c.source);
     files.push(f);
     audios.push(await hasAudio(f));
+    if (c.smartCrop && req.fit === "cover" && typeof c.cropX !== "number") {
+      c.cropX = await personCenterX(f, c.inS, c.outS, log);
+      if (typeof c.cropX === "number") log(`recadrage : personnes au centre à ${Math.round(c.cropX * 100)} % de la largeur`);
+    }
   }
   return { files, audios };
 }
@@ -335,7 +364,7 @@ export async function startMontage(req: MontageRequest): Promise<MontageJob> {
   jobs.set(id, job);
 
   (async () => {
-    const { files, audios } = await prepare(req);
+    const { files, audios } = await prepare(req, (l) => console.log("[niche] montage :", l));
     const g = await buildGraph(req, files, audios, true);
     job.durationS = g.total;
     fs.mkdirSync(RENDERS_DIR, { recursive: true });
@@ -369,6 +398,15 @@ export async function startMontage(req: MontageRequest): Promise<MontageJob> {
     job.durationS = (await mediaDuration(out)) ?? g.total;
     job.output = out;
     job.url = `/renders/${outName}`;
+    if (req.cover) {
+      try {
+        const coverName = `montage-${id}-cover.jpg`;
+        await coverImage(out, Math.max(0, Math.min(job.durationS - 0.1, req.cover.atS)), req.cover.title, path.join(RENDERS_DIR, coverName), req.subtitles?.style?.font || "Anton");
+        job.coverUrl = `/renders/${coverName}`;
+      } catch (e) {
+        console.warn("[niche] couverture :", (e as Error).message);
+      }
+    }
     job.progress = 1;
     job.status = "done";
   })().catch((e) => {

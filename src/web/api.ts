@@ -80,7 +80,7 @@ export type ClipSource = { kind: "video" | "capture" | "render"; id: string };
 export type ClipEffect =
   | "zoom-in" | "zoom-out" | "bw" | "warm" | "cold" | "vignette" | "mirror" | "sharpen" | "punch" | "fade-in" | "fade-out" | "blur-bg"
   | "sepia" | "vintage" | "cinematic" | "glow" | "blur" | "pixelate" | "invert" | "shake" | "letterbox" | "flash" | "dream" | "contrast-hard";
-export type Clip = { source: ClipSource; inS: number; outS: number; mute?: boolean; volume?: number; speed?: number; effects?: ClipEffect[] };
+export type Clip = { source: ClipSource; inS: number; outS: number; mute?: boolean; volume?: number; speed?: number; effects?: ClipEffect[]; smartCrop?: boolean };
 export type Word = { text: string; start: number; end: number };
 export type Cue = { id: string; start: number; end: number; text: string; words: Word[] };
 export type SubtitleStyle = {
@@ -94,9 +94,12 @@ export type SubtitleStyle = {
   box: boolean;
   uppercase: boolean;
   maxWords: number;
+  animation: "none" | "pop" | "box" | "bounce";
+  emojis: boolean;
+  y?: number;
 };
 export type TextItem = { id: string; text: string; start: number; end: number; x: number; y: number; size: number; color: string; font: string; animation: "none" | "pop" | "fade" };
-export type MusicTrack = { file: string; name: string; durationS: number | null; url: string };
+export type MusicTrack = { file: string; name: string; durationS: number | null; url: string; bpm: number | null };
 export type MusicOptions = { file: string; volume?: number; startS?: number; fadeInS?: number; fadeOutS?: number; duck?: boolean };
 export type MontageRequest = {
   name?: string;
@@ -110,13 +113,25 @@ export type MontageRequest = {
   transition?: { type: string; durationS: number } | null;
   subtitles?: { cues: Cue[]; style: Partial<SubtitleStyle> } | null;
   texts?: TextItem[];
+  cover?: { atS: number; title: string } | null;
 };
 export type MontageSources = {
   videos: { id: string; name: string; durationS: number | null; cover: string | null; url: string }[];
   captures: { id: string; name: string; durationS: number; url: string }[];
   renders: { id: string; name: string; url: string }[];
 };
-export type MontageJob = { id: string; name: string; status: "running" | "done" | "error"; progress: number; url: string | null; error: string | null; createdAt: number; durationS: number };
+export type MontageJob = { id: string; name: string; status: "running" | "done" | "error"; progress: number; url: string | null; error: string | null; createdAt: number; durationS: number; coverUrl?: string | null };
+export type Project = { id: string; name: string; updatedAt: number; state?: unknown };
+export type Trends = {
+  days: number;
+  virals: number;
+  topTags: { tag: string; n: number; views: number }[];
+  topAccounts: { handle: string; n: number; views: number }[];
+  medianDurationS: number | null;
+  durationBuckets: Record<string, number>;
+  hours: number[];
+  alerts: number;
+};
 
 export type PublishSource = { kind: "montage" | "render" | "capture"; id: string };
 export type Texts = {
@@ -139,7 +154,7 @@ export type Publication = {
   hint: string;
   context: string;
   texts: Texts | null;
-  sent: { at: number; channel: string; provider: string; status: "ok" | "error"; detail: string }[];
+  sent: { at: number; channel: string; provider: string; status: "ok" | "error"; detail: string; postId?: string; scheduledFor?: string }[];
 };
 export type Channel = { id: string; name: string; identifier: string; picture?: string; disabled?: boolean };
 
@@ -284,6 +299,20 @@ export const api = {
   publishChannels: () => req<{ enabled: boolean; channels: Channel[]; error?: string }>("/api/publish/channels"),
   publishSend: (key: string, channels: string[], when: string | null) => req<Publication["sent"]>(`/api/publish/${key}/send`, { method: "POST", body: JSON.stringify({ channels, when }) }),
   montageSources: () => req<MontageSources>("/api/montage/sources"),
+  silences: (source: ClipSource, inS: number, outS: number, thresholdDb = -32, minSilenceS = 0.45) =>
+    req<{ segments: { start: number; end: number }[] }>("/api/montage/silences", { method: "POST", body: JSON.stringify({ source, inS, outS, thresholdDb, minSilenceS }) }),
+  translateCues: (cues: Cue[], to: string) => req<{ cues: Cue[] }>("/api/montage/translate-cues", { method: "POST", body: JSON.stringify({ cues, to }) }),
+  thumbsUrl: (s: ClipSource) => `/api/media/thumbs/${s.kind}/${s.id}`,
+  waveUrl: (s: ClipSource) => `/api/media/wave/${s.kind}/${s.id}`,
+  projects: () => req<Project[]>("/api/projects"),
+  project: (id: string) => req<Project>(`/api/projects/${id}`),
+  saveProject: (p: { id?: string; name: string; state: unknown }) => req<Project>("/api/projects", { method: "POST", body: JSON.stringify(p) }),
+  deleteProject: (id: string) => req<{ ok: boolean }>(`/api/projects/${id}`, { method: "DELETE" }),
+  trends: (days = 7) => req<Trends>(`/api/trends?days=${days}`),
+  reminders: () => req<{ id: number; due_at: number; message: string }[]>("/api/reminders"),
+  publications: () => req<Publication[]>("/api/publish"),
+  publishAnalytics: (key: string) => req<{ channel: string; provider: string; postId: string; metrics: unknown; error?: string }[]>(`/api/publish/${key}/analytics`),
+  dubJob: (id: number, to: string) => req<Job>(`/api/jobs/${id}/dub`, { method: "POST", body: JSON.stringify({ to }) }),
   montages: () => req<MontageJob[]>("/api/montage"),
   montage: (id: string) => req<MontageJob>(`/api/montage/${id}`),
   startMontage: (body: MontageRequest) => req<MontageJob>("/api/montage", { method: "POST", body: JSON.stringify(body) }),

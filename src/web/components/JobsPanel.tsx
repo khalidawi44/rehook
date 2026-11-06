@@ -105,6 +105,21 @@ const JobRow: React.FC<{ job: Job; open: boolean; toggle: () => void; reload: ()
               <button onClick={() => retry(false)} className="rounded-lg border border-zinc-700 px-2 py-1 hover:bg-zinc-800">
                 Nouveau script
               </button>
+              {brief ? (
+                <select
+                  defaultValue=""
+                  onChange={(e) => {
+                    if (!e.target.value) return;
+                    api.dubJob(job.id, e.target.value).then(() => { notify("Version traduite lancée (script, voix et rendu)"); reload(); }).catch((err: Error) => notify(err.message));
+                    e.target.value = "";
+                  }}
+                  className="rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1 hover:bg-zinc-800"
+                  title="Même vidéo dans une autre langue"
+                >
+                  <option value="">🌍 Version en…</option>
+                  {[["en", "anglais"], ["es", "espagnol"], ["de", "allemand"], ["it", "italien"], ["pt", "portugais"], ["fr", "français"]].filter(([k]) => k !== brief.language).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                </select>
+              ) : null}
               <button onClick={remove} className="rounded-lg border border-red-900 px-2 py-1 text-red-300 hover:bg-red-950">
                 Supprimer
               </button>

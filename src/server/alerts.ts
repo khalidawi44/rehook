@@ -6,7 +6,7 @@ import { db, getSettings, now, type AccountRow, type SnapshotRow, type VideoRow 
 export type AlertRow = {
   id: number;
   video_id: number;
-  kind: "explose" | "nouvelle" | "accelere";
+  kind: "explose" | "nouvelle" | "accelere" | "record";
   message: string;
   views: number;
   views_per_hour: number;
@@ -62,6 +62,23 @@ export function detectAlert(video: VideoRow, isNew: boolean): boolean {
       return true;
     }
     return false;
+  }
+
+  // 1 bis. Vidéo qui dépasse nettement la moyenne des 10 dernières vidéos du compte (record du compte).
+  if (account && last.views >= s.alertMinViews && (!previous || previous.kind !== "record")) {
+    const others = db
+      .prepare(
+        `SELECT MAX(sn.views) AS views FROM videos v JOIN snapshots sn ON sn.video_id = v.id
+         WHERE v.account_id = ? AND v.id <> ? GROUP BY v.id ORDER BY v.posted_at DESC LIMIT 10`,
+      )
+      .all(video.account_id, video.id) as { views: number }[];
+    if (others.length >= 4) {
+      const avg = others.reduce((a, o) => a + o.views, 0) / others.length;
+      if (avg > 0 && last.views >= 3 * avg) {
+        record(video, "record", `🏆 @${account.handle} fait ${(last.views / avg).toFixed(1).replace(".", ",")}x sa moyenne : ${fmt(last.views)} vues (moyenne ${fmt(avg)} sur ${others.length} vidéos)`, last.views, 0);
+        return true;
+      }
+    }
   }
 
   // 2. Rythme du dernier intervalle contre le précédent.

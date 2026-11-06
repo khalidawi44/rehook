@@ -21,7 +21,13 @@ import { CAPTURES_DIR, listCaptures as listCapturesForExtract } from "./captures
 import { RENDERS_DIR as RENDERS } from "./paths.js";
 import { fetchTikTokProfile } from "./providers/tiktok-page.js";
 import { removeDemo, seedDemo } from "./providers/demo.js";
-import { createJob, deleteJob, getJob, listJobs, retryJob } from "./recreate/index.js";
+import { createJob, deleteJob, dubJob, getJob, listJobs, retryJob } from "./recreate/index.js";
+import { deleteProject, getProject, listProjects, saveProject } from "./projects.js";
+import { speechSegments, thumbStrip, waveImage } from "./tools/media-analysis.js";
+import { translateCues } from "./translate.js";
+import { trends } from "./trends.js";
+import { listReminders } from "./reminders.js";
+import { postizAnalytics } from "./publish.js";
 import { imageProvider } from "./recreate/images.js";
 import { voiceProvider } from "./recreate/voice.js";
 import { COVERS_DIR, PUBLIC_DIR, RENDERS_DIR, ROOT } from "./paths.js";
@@ -268,6 +274,7 @@ const JobOptionsSchema = z.object({
   handle: z.string().max(60).optional(),
   reuseBrief: z.boolean().optional(),
   backgroundCapture: z.string().nullable().optional(),
+  translateTo: z.string().max(5).nullable().optional(),
 });
 
 app.post("/api/recreate", (req, res) => {
@@ -293,6 +300,13 @@ app.post("/api/jobs/:id/retry", (req, res) => {
   res.json(job);
 });
 app.delete("/api/jobs/:id", (req, res) => res.json({ ok: deleteJob(Number(req.params.id)) }));
+app.post("/api/jobs/:id/dub", (req, res) => {
+  const to = String(req.body?.to ?? "").slice(0, 5);
+  if (!to) return res.status(400).json({ error: "Langue manquante" });
+  const job = dubJob(Number(req.params.id), to);
+  if (!job) return res.status(404).json({ error: "Tâche introuvable ou sans script" });
+  res.json(job);
+});
 
 // ---- Enregistrements d'écran -------------------------------------------------
 
@@ -325,6 +339,7 @@ const ClipSchema = z.object({
   volume: z.number().min(0).max(4).optional(),
   speed: z.number().min(0.25).max(4).optional(),
   effects: z.array(z.enum(CLIP_EFFECTS as [ClipEffect, ...ClipEffect[]])).optional(),
+  smartCrop: z.boolean().optional(),
 });
 const WordSchema = z.object({ text: z.string(), start: z.number(), end: z.number() });
 const CueSchema = z.object({ id: z.string(), start: z.number(), end: z.number(), text: z.string().max(500), words: z.array(WordSchema) });
@@ -339,6 +354,9 @@ const StyleSchema = z.object({
   box: z.boolean().optional(),
   uppercase: z.boolean().optional(),
   maxWords: z.number().min(1).max(12).optional(),
+  animation: z.enum(["none", "pop", "box", "bounce"]).optional(),
+  emojis: z.boolean().optional(),
+  y: z.number().min(0).max(1).optional(),
 });
 const TextSchema = z.object({
   id: z.string(),
@@ -367,6 +385,7 @@ const MontageSchema = z.object({
   transition: z.object({ type: z.string().max(30), durationS: z.number().min(0).max(2) }).nullable().optional(),
   subtitles: z.object({ cues: z.array(CueSchema).max(2000), style: StyleSchema }).nullable().optional(),
   texts: z.array(TextSchema).max(200).optional(),
+  cover: z.object({ atS: z.number().min(0), title: z.string().max(120) }).nullable().optional(),
 });
 function parseMontage(body: unknown): MontageRequest | string {
   const parsed = MontageSchema.safeParse(body);
@@ -388,6 +407,90 @@ app.post(
     const r = parseMontage(req.body?.montage);
     if (typeof r === "string") return void res.status(400).json({ error: r });
     res.json(await transcribeMontage(r, typeof req.body?.language === "string" ? req.body.language : undefined, (l) => console.log("[niche]", l)));
+  }),
+);
+
+/** Fichier d'une source de montage (pour miniatures, onde, silences). */
+async function sourceFile(kind: string, id: string): Promise<string | null> {
+  if (kind === "video") {
+    const v = db.prepare("SELECT * FROM videos WHERE id = ?").get(Number(id)) as VideoRow | undefined;
+    return v ? ensureSource(v) : null;
+  }
+  if (kind === "capture") {
+    const c = listCapturesForExtract().find((x) => x.id === id);
+    return c ? path.join(CAPTURES_DIR, c.file) : null;
+  }
+  if (kind === "render") {
+    const f = path.join(RENDERS, `niche-${Number(id)}.mp4`);
+    return fs.existsSync(f) ? f : null;
+  }
+  return null;
+}
+app.get(
+  "/api/media/thumbs/:kind/:id",
+  asyncRoute(async (req, res) => {
+    const f = await sourceFile(String(req.params.kind), String(req.params.id));
+    if (!f) return void res.status(404).end();
+    res.sendFile(await thumbStrip(f), { headers: { "Cache-Control": "private, max-age=86400" } });
+  }),
+);
+app.get(
+  "/api/media/wave/:kind/:id",
+  asyncRoute(async (req, res) => {
+    const f = await sourceFile(String(req.params.kind), String(req.params.id));
+    const w = f ? await waveImage(f) : null;
+    if (!w) return void res.status(404).end();
+    res.sendFile(w, { headers: { "Cache-Control": "private, max-age=86400" } });
+  }),
+);
+app.post(
+  "/api/montage/silences",
+  asyncRoute(async (req, res) => {
+    const src = req.body?.source as { kind: string; id: string } | undefined;
+    const f = src ? await sourceFile(src.kind, src.id) : null;
+    if (!f) return void res.status(404).json({ error: "Source introuvable" });
+    const inS = Number(req.body?.inS ?? 0);
+    const outS = Number(req.body?.outS ?? 0);
+    const thr = Number(req.body?.thresholdDb ?? -32);
+    const min = Number(req.body?.minSilenceS ?? 0.45);
+    res.json({ segments: await speechSegments(f, inS, outS > inS ? outS : inS + 1, thr, min) });
+  }),
+);
+app.post(
+  "/api/montage/translate-cues",
+  asyncRoute(async (req, res) => {
+    const cues = z.array(CueSchema).parse(req.body?.cues ?? []);
+    const to = String(req.body?.to ?? "en").slice(0, 5);
+    if (!process.env.ANTHROPIC_API_KEY) return void res.status(400).json({ error: "ANTHROPIC_API_KEY manquante" });
+    res.json({ cues: await translateCues(cues, to, (l) => console.log("[niche]", l)) });
+  }),
+);
+
+// ---- Projets de montage ------------------------------------------------------
+
+app.get("/api/projects", (_req, res) => res.json(listProjects()));
+app.get("/api/projects/:id", (req, res) => {
+  const p = getProject(String(req.params.id));
+  if (!p) return res.status(404).json({ error: "Projet introuvable" });
+  res.json(p);
+});
+app.post("/api/projects", (req, res) => {
+  const name = String(req.body?.name ?? "Sans titre").slice(0, 80);
+  res.json(saveProject({ id: typeof req.body?.id === "string" ? req.body.id : undefined, name, state: req.body?.state ?? {} }));
+});
+app.delete("/api/projects/:id", (req, res) => res.json({ ok: deleteProject(String(req.params.id)) }));
+
+// ---- Tendances et planning ---------------------------------------------------
+
+app.get("/api/trends", (req, res) => res.json(trends(Number(req.query.days ?? 7))));
+app.get("/api/reminders", (_req, res) => res.json(listReminders()));
+app.get(
+  "/api/publish/:key/analytics",
+  asyncRoute(async (req, res) => {
+    const p = getPublication(String(req.params.key));
+    if (!p) return void res.status(404).json({ error: "Publication introuvable" });
+    if (!postizEnabled()) return void res.json([]);
+    res.json(await postizAnalytics(p, Number(req.query.days ?? 7)));
   }),
 );
 

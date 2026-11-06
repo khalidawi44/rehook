@@ -25,6 +25,17 @@ export const PublishPanel: React.FC<{ source: PublishSource; title: string; onCl
   const [when, setWhen] = useState("");
   const [sending, setSending] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [analytics, setAnalytics] = useState<unknown[] | null>(null);
+  const loadAnalytics = async () => {
+    if (!pub) return;
+    try {
+      const r = await api.publishAnalytics(pub.key);
+      setAnalytics(r);
+      if (!r.length) notify("Pas encore de statistiques (rien d'envoyé via Postiz, ou identifiant du post inconnu)");
+    } catch (e) {
+      notify((e as Error).message);
+    }
+  };
 
   useEffect(() => {
     api.publication(source).then((p) => {
@@ -209,6 +220,10 @@ export const PublishPanel: React.FC<{ source: PublishSource; title: string; onCl
                     Pour publier en un clic sur TikTok, Instagram, YouTube, X, Facebook et Threads, Niche passe par Postiz (postiz.com, ou auto-hébergé). Crée un compte, connecte tes réseaux, puis mets <code>POSTIZ_API_KEY</code> dans le fichier .env. Snapchat n'a pas d'API : partage depuis le téléphone.
                   </p>
                 )}
+                {pub?.sent.some((s) => s.status === "ok") ? (
+                  <button onClick={loadAnalytics} className="mt-3 rounded-lg border border-zinc-700 px-3 py-1.5 text-xs hover:bg-zinc-800">📈 Vues et engagement de mes posts (7 jours)</button>
+                ) : null}
+                {analytics ? <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-zinc-900 p-2 text-xs text-zinc-300">{JSON.stringify(analytics, null, 1)}</pre> : null}
                 {pub?.sent.length ? (
                   <ul className="mt-3 space-y-1 text-xs">
                     {pub.sent.slice(-10).reverse().map((s, i) => (

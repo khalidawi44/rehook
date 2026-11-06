@@ -11,6 +11,7 @@ import { z } from "zod";
 import { db, type JobRow } from "./db.js";
 import { DATA_DIR, RENDERS_DIR, ROOT } from "./paths.js";
 import { getMontage } from "./montage.js";
+import { addReminder } from "./reminders.js";
 
 const execFileP = promisify(execFile);
 
@@ -38,7 +39,7 @@ export type Publication = {
   hint: string;
   context: string;
   texts: Texts | null;
-  sent: { at: number; channel: string; provider: string; status: "ok" | "error"; detail: string }[];
+  sent: { at: number; channel: string; provider: string; status: "ok" | "error"; detail: string; postId?: string; scheduledFor?: string }[];
 };
 
 const FILE = path.join(DATA_DIR, "publications.json");
@@ -193,7 +194,15 @@ export async function postizPublish(p: Publication, channels: Channel[], when: s
     const { content, settings } = textFor(p.texts, ch.identifier);
     try {
       const out = await postiz(["posts:create", "-c", content, "-m", up.path, "-s", date, "--settings", JSON.stringify(settings), "-i", ch.id]);
-      results.push({ at: Math.floor(Date.now() / 1000), channel: ch.name, provider: ch.identifier, status: "ok", detail: out.trim().slice(0, 200) });
+      let postId: string | undefined;
+      try {
+        const j = jsonFrom(out) as { id?: string; postId?: string; posts?: { id?: string; postId?: string }[] } | { id?: string }[];
+        const first = Array.isArray(j) ? j[0] : (j.posts?.[0] ?? j);
+        postId = (first as { id?: string; postId?: string })?.postId ?? (first as { id?: string })?.id;
+      } catch {
+        postId = out.match(/[0-9a-f]{8}-[0-9a-f-]{27}|[a-z0-9]{20,}/i)?.[0];
+      }
+      results.push({ at: Math.floor(Date.now() / 1000), channel: ch.name, provider: ch.identifier, status: "ok", detail: out.trim().slice(0, 200), postId, scheduledFor: date });
       log(`postiz : ${ch.name} (${ch.identifier}) programmé pour ${date}`);
     } catch (e) {
       const msg = (e as { stderr?: string; message: string }).stderr || (e as Error).message;
@@ -204,5 +213,25 @@ export async function postizPublish(p: Publication, channels: Channel[], when: s
   p.sent.push(...results);
   p.updatedAt = Math.floor(Date.now() / 1000);
   savePublication(p);
+  const okNames = results.filter((r) => r.status === "ok").map((r) => r.channel);
+  if (when && okNames.length) {
+    const due = Math.floor(new Date(when).getTime() / 1000) - 30 * 60;
+    addReminder(due, `⏰ Dans 30 min, publication programmée sur ${okNames.join(", ")} : « ${p.texts.tiktok.caption.split("\n")[0].slice(0, 80)} »`);
+  }
   return results;
+}
+
+/** Statistiques Postiz des posts déjà envoyés (vues, likes…), si l'identifiant du post est connu. */
+export async function postizAnalytics(p: Publication, days = 7) {
+  const out: { channel: string; provider: string; postId: string; metrics: unknown; error?: string }[] = [];
+  for (const s of p.sent) {
+    if (s.status !== "ok" || !s.postId) continue;
+    try {
+      const raw = await postiz(["analytics:post", s.postId, "-d", String(days)]);
+      out.push({ channel: s.channel, provider: s.provider, postId: s.postId, metrics: jsonFrom(raw) });
+    } catch (e) {
+      out.push({ channel: s.channel, provider: s.provider, postId: s.postId, metrics: null, error: ((e as { stderr?: string }).stderr || (e as Error).message).slice(0, 200) });
+    }
+  }
+  return out;
 }

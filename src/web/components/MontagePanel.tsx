@@ -9,6 +9,7 @@ import {
   type MontageRequest,
   type MontageSources,
   type MusicTrack,
+  type Project,
   type PublishSource,
   type SubtitleStyle,
   type TextItem,
@@ -28,6 +29,7 @@ type TClip = {
   volume: number;
   speed: number;
   effects: ClipEffect[];
+  smartCrop?: boolean;
 };
 
 const PRESETS = [
@@ -93,7 +95,86 @@ const TRANSITIONS = [
   ["zoomin", "Zoom"],
 ];
 
-const DEFAULT_STYLE: SubtitleStyle = { mode: "karaoke", position: "bottom", size: 84, font: "Anton", color: "#ffffff", highlight: "#facc15", outline: "#000000", box: false, uppercase: true, maxWords: 4 };
+const DEFAULT_STYLE: SubtitleStyle = { mode: "karaoke", position: "bottom", size: 84, font: "Anton", color: "#ffffff", highlight: "#facc15", outline: "#000000", box: false, uppercase: true, maxWords: 4, animation: "pop", emojis: false };
+const FONTS = ["Anton", "Permanent Marker", "Rubik Spray Paint", "Lobster"];
+
+type Template = {
+  key: string;
+  label: string;
+  desc: string;
+  style: Partial<SubtitleStyle>;
+  transition: { type: string; durationS: number };
+  fadeS: number;
+  texts: (total: number) => Omit<TextItem, "id">[];
+  effects?: ClipEffect[];
+  musicVolume?: number;
+};
+const TEMPLATES: Template[] = [
+  {
+    key: "storytime",
+    label: "Storytime",
+    desc: "Accroche POV en haut, karaoké jaune, fondu entre les scènes.",
+    style: { mode: "karaoke", animation: "pop", position: "bottom", highlight: "#facc15", font: "Anton", emojis: true },
+    transition: { type: "fade", durationS: 0.3 },
+    fadeS: 0.3,
+    texts: (t) => [{ text: "POV : …", start: 0, end: Math.min(3, t), x: 0.5, y: 0.18, size: 84, color: "#ffffff", font: "Anton", animation: "pop" }],
+    effects: ["punch"],
+  },
+  {
+    key: "avant-apres",
+    label: "Avant / Après",
+    desc: "Deux parties, titres AVANT et APRÈS, volet entre les deux.",
+    style: { mode: "block", position: "bottom", font: "Anton" },
+    transition: { type: "wipeleft", durationS: 0.4 },
+    fadeS: 0.2,
+    texts: (t) => [
+      { text: "AVANT", start: 0, end: t / 2, x: 0.5, y: 0.15, size: 110, color: "#f87171", font: "Anton", animation: "pop" },
+      { text: "APRÈS", start: t / 2, end: t, x: 0.5, y: 0.15, size: 110, color: "#4ade80", font: "Anton", animation: "pop" },
+    ],
+  },
+  {
+    key: "top3",
+    label: "Top 3",
+    desc: "Numéros 3, 2, 1 sur trois tiers, glissement entre les clips.",
+    style: { mode: "karaoke", animation: "box", position: "bottom", highlight: "#38bdf8", font: "Anton" },
+    transition: { type: "slideleft", durationS: 0.35 },
+    fadeS: 0.2,
+    texts: (t) => ["3", "2", "1"].map((n, i) => ({ text: `N°${n}`, start: (i * t) / 3, end: ((i + 1) * t) / 3, x: 0.5, y: 0.14, size: 120, color: "#ffffff", font: "Anton", animation: "pop" as const })),
+  },
+  {
+    key: "reaction",
+    label: "Réaction",
+    desc: "Bandes cinéma, zoom lent, sous-titres au centre, gros emojis.",
+    style: { mode: "karaoke", animation: "bounce", position: "center", highlight: "#fb7185", font: "Permanent Marker", emojis: true, size: 92 },
+    transition: { type: "fadeblack", durationS: 0.25 },
+    fadeS: 0.2,
+    texts: () => [],
+    effects: ["letterbox", "zoom-in"],
+  },
+  {
+    key: "teaser",
+    label: "Teaser",
+    desc: "Flash blanc au début, contraste dur, titre choc puis « la suite en commentaire ».",
+    style: { mode: "block", position: "center", font: "Anton", size: 96, box: true },
+    transition: { type: "zoomin", durationS: 0.3 },
+    fadeS: 0.4,
+    texts: (t) => [
+      { text: "TU VAS PAS LE CROIRE", start: 0, end: Math.min(2.5, t), x: 0.5, y: 0.5, size: 100, color: "#ffffff", font: "Anton", animation: "pop" },
+      { text: "La suite en commentaire 👇", start: Math.max(0, t - 2.5), end: t, x: 0.5, y: 0.8, size: 64, color: "#facc15", font: "Anton", animation: "fade" },
+    ],
+    effects: ["contrast-hard", "flash"],
+  },
+  {
+    key: "astuce",
+    label: "Astuce / Tuto",
+    desc: "Étapes numérotées, karaoké sobre, cinéma doux.",
+    style: { mode: "karaoke", animation: "none", position: "bottom", highlight: "#4ade80", font: "Anton", size: 76 },
+    transition: { type: "smoothleft", durationS: 0.3 },
+    fadeS: 0.3,
+    texts: (t) => [{ text: "Étape 1", start: 0, end: Math.min(3, t), x: 0.5, y: 0.16, size: 80, color: "#4ade80", font: "Anton", animation: "pop" }],
+    effects: ["cinematic"],
+  },
+];
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 const clipLen = (c: TClip) => (c.outS - c.inS) / c.speed;
@@ -138,6 +219,17 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
   const [exports, setExports] = useState<MontageJob[]>([]);
   const [uploading, setUploading] = useState(false);
   const [publish, setPublish] = useState<{ source: PublishSource; title: string } | null>(null);
+  const [cover, setCover] = useState<{ on: boolean; atS: number; title: string }>({ on: false, atS: 1, title: "" });
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [projectName, setProjectName] = useState("Mon montage");
+  const [showThumbs, setShowThumbs] = useState(true);
+  const [silBusy, setSilBusy] = useState(false);
+  const [transBusy, setTransBusy] = useState(false);
+  const [trendsOpen] = useState(false);
+  void trendsOpen;
+  const historyRef = useRef<{ past: string[]; future: string[]; last: string }>({ past: [], future: [], last: "" });
+  const restoringRef = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const musicRef = useRef<HTMLAudioElement>(null);
   const clipsRef = useRef(clips);
@@ -361,9 +453,175 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
     update(selected.uid, { effects: has ? selected.effects.filter((x) => x !== e) : [...selected.effects, e] });
   };
 
+  // ---- Annuler / rétablir et sauvegarde automatique ----------------------------
+  const snapshot = () => JSON.stringify({ clips, cues, texts, style, out, fit, transition, fade, musicSel, musicOpts, name, cover });
+  const restore = (json: string) => {
+    restoringRef.current = true;
+    try {
+      const st = JSON.parse(json) as { clips: TClip[]; cues: Cue[]; texts: TextItem[]; style: SubtitleStyle; out: { w: number; h: number }; fit: "cover" | "contain"; transition: { type: string; durationS: number }; fade: number; musicSel: string; musicOpts: typeof musicOpts; name: string; cover: typeof cover };
+      setClips(st.clips ?? []);
+      setCues(st.cues ?? []);
+      setTexts(st.texts ?? []);
+      setStyle({ ...DEFAULT_STYLE, ...(st.style ?? {}) });
+      if (st.out) setOut(st.out);
+      if (st.fit) setFit(st.fit);
+      if (st.transition) setTransition(st.transition);
+      if (typeof st.fade === "number") setFade(st.fade);
+      setMusicSel(st.musicSel ?? "");
+      if (st.musicOpts) setMusicOpts(st.musicOpts);
+      setName(st.name ?? "");
+      if (st.cover) setCover(st.cover);
+    } finally {
+      setTimeout(() => (restoringRef.current = false), 50);
+    }
+  };
+  useEffect(() => {
+    const h = historyRef.current;
+    const cur = snapshot();
+    if (restoringRef.current || cur === h.last) return;
+    const t = setTimeout(() => {
+      if (h.last) h.past.push(h.last);
+      if (h.past.length > 60) h.past.shift();
+      h.future = [];
+      h.last = cur;
+      try {
+        localStorage.setItem("niche.montage.autosave", cur);
+      } catch {
+        // stockage indisponible
+      }
+      if (projectId) api.saveProject({ id: projectId, name: projectName, state: JSON.parse(cur) }).catch(() => {});
+    }, 500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clips, cues, texts, style, out, fit, transition, fade, musicSel, musicOpts, name, cover]);
+  const undo = () => {
+    const h = historyRef.current;
+    const prev = h.past.pop();
+    if (!prev) return;
+    h.future.push(h.last);
+    h.last = prev;
+    restore(prev);
+  };
+  const redo = () => {
+    const h = historyRef.current;
+    const next = h.future.pop();
+    if (!next) return;
+    h.past.push(h.last);
+    h.last = next;
+    restore(next);
+  };
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
+      else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === "y" || (e.key.toLowerCase() === "z" && e.shiftKey))) { e.preventDefault(); redo(); }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // Reprise automatique du dernier montage au chargement.
+  useEffect(() => {
+    api.projects().then(setProjects).catch(() => {});
+    try {
+      const saved = localStorage.getItem("niche.montage.autosave");
+      if (saved && JSON.parse(saved).clips?.length) {
+        restore(saved);
+        historyRef.current.last = saved;
+        notify("Dernier montage repris automatiquement");
+      }
+    } catch {
+      // rien à reprendre
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const saveAsProject = async () => {
+    const n = prompt("Nom du projet", projectName) ?? "";
+    if (!n.trim()) return;
+    const p = await api.saveProject({ id: projectId ?? undefined, name: n.trim(), state: JSON.parse(snapshot()) });
+    setProjectId(p.id);
+    setProjectName(p.name);
+    setProjects(await api.projects());
+    notify("Projet enregistré");
+  };
+  const openProject = async (id: string) => {
+    const p = await api.project(id);
+    restore(JSON.stringify(p.state));
+    setProjectId(p.id);
+    setProjectName(p.name);
+    notify(`Projet « ${p.name} » ouvert`);
+  };
+  const newProject = () => {
+    if (clips.length && !confirm("Vider la timeline pour un nouveau montage ?")) return;
+    setClips([]); setCues([]); setTexts([]); setStyle(DEFAULT_STYLE); setMusicSel(""); setName(""); setProjectId(null); setProjectName("Mon montage"); setCover({ on: false, atS: 1, title: "" });
+    setSel(null); setHead(0);
+  };
+
+  // ---- Modèles -----------------------------------------------------------------
+  const applyTemplate = (t: Template) => {
+    setStyle({ ...DEFAULT_STYLE, ...t.style });
+    setTransition(t.transition);
+    setFade(t.fadeS);
+    setTexts(t.texts(Math.max(3, total)).map((x) => ({ ...x, id: uid() })));
+    if (t.effects?.length) setClips((cs) => cs.map((c) => ({ ...c, effects: [...new Set([...c.effects, ...t.effects!])] })));
+    if (typeof t.musicVolume === "number") setMusicOpts((m) => ({ ...m, volume: t.musicVolume! }));
+    setTool("subs");
+    notify(`Modèle « ${t.label} » appliqué`);
+  };
+
+  // ---- Silences, recadrage, tempo, traduction ------------------------------------
+  const cutSilences = async () => {
+    if (!selected) return;
+    setSilBusy(true);
+    try {
+      const r = await api.silences(selected.source, selected.inS, selected.outS);
+      if (r.segments.length <= 1) return notify("Pas de silence net dans ce clip");
+      const parts: TClip[] = r.segments.map((sg) => ({ ...selected, uid: uid(), inS: sg.start, outS: sg.end }));
+      setClips((cs) => {
+        const i = cs.findIndex((c) => c.uid === selected.uid);
+        return [...cs.slice(0, i), ...parts, ...cs.slice(i + 1)];
+      });
+      notify(`${r.segments.length} morceaux parlés gardés, silences retirés`);
+    } catch (e) {
+      notify((e as Error).message);
+    } finally {
+      setSilBusy(false);
+    }
+  };
+  const snapToBeat = () => {
+    const track = music.find((m) => m.file === musicSel);
+    if (!track?.bpm) return notify("Choisis d'abord une musique dont le tempo est connu");
+    const beat = 60 / track.bpm;
+    let acc = 0;
+    setClips((cs) =>
+      cs.map((c) => {
+        const len = clipLen(c);
+        const target = Math.max(beat, Math.round(len / beat) * beat);
+        acc += target;
+        const outS = Math.min(c.durationS, c.inS + target * c.speed);
+        return { ...c, outS };
+      }),
+    );
+    notify(`Coupes calées sur ${track.bpm} bpm (un temps = ${beat.toFixed(2)} s)`);
+  };
+  const translateSubs = async (to: string) => {
+    if (!cues.length) return notify("Pas de sous-titres à traduire");
+    setTransBusy(true);
+    try {
+      const r = await api.translateCues(cues, to);
+      setCues(r.cues);
+      notify("Sous-titres traduits");
+    } catch (e) {
+      notify((e as Error).message);
+    } finally {
+      setTransBusy(false);
+    }
+  };
+
   const request = (): MontageRequest => ({
     name: name || undefined,
-    clips: clips.map((c) => ({ source: c.source, inS: c.inS, outS: c.outS, mute: c.mute, volume: c.volume, speed: c.speed, effects: c.effects })),
+    clips: clips.map((c) => ({ source: c.source, inS: c.inS, outS: c.outS, mute: c.mute, volume: c.volume, speed: c.speed, effects: c.effects, smartCrop: c.smartCrop })),
     width: out.w,
     height: out.h,
     fit,
@@ -372,6 +630,7 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
     transition: transition.type === "none" ? null : transition,
     subtitles: cues.length ? { cues, style } : null,
     texts,
+    cover: cover.on ? { atS: cover.atS, title: cover.title } : null,
   });
 
   const exportNow = async () => {
@@ -588,19 +847,38 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
               <div
                 className="pointer-events-none absolute left-2 right-2 flex flex-wrap justify-center gap-x-1 text-center font-bold uppercase leading-tight"
                 style={{
-                  fontFamily: "Anton, Impact, sans-serif",
+                  fontFamily: `"${style.font}", Anton, Impact, sans-serif`,
                   fontSize: style.size * previewScale * (out.h / 1920) * (1920 / out.h),
-                  bottom: style.position === "bottom" ? 420 * previewScale : undefined,
-                  top: style.position === "top" ? 260 * previewScale : style.position === "center" ? "45%" : undefined,
+                  bottom: style.y === undefined && style.position === "bottom" ? 420 * previewScale : undefined,
+                  top: style.y !== undefined ? `${style.y * 100}%` : style.position === "top" ? 260 * previewScale : style.position === "center" ? "45%" : undefined,
+                  transform: style.y !== undefined ? "translateY(-50%)" : undefined,
                   textShadow: "0 0 6px #000, 0 2px 0 #000",
                   background: style.box ? "rgba(0,0,0,0.5)" : undefined,
                 }}
               >
                 {(activeCue.words.length ? activeCue.words : activeCue.text.split(/\s+/).map((t) => ({ text: t, start: activeCue.start, end: activeCue.end }))).map((w, i) => (
-                  <span key={i} style={{ color: style.mode === "karaoke" && head >= w.start && head <= w.end + 0.05 ? style.highlight : style.color }}>
-                    {style.uppercase ? w.text.toUpperCase() : w.text}
-                  </span>
+                  (() => {
+                    const active = style.mode === "karaoke" && head >= w.start && head <= w.end + 0.05;
+                    const box = active && style.animation === "box";
+                    return (
+                      <span
+                        key={i}
+                        style={{
+                          color: box ? "#101010" : active ? style.highlight : style.color,
+                          background: box ? style.highlight : undefined,
+                          borderRadius: box ? 6 : undefined,
+                          padding: box ? "0 4px" : undefined,
+                          display: "inline-block",
+                          transform: active && (style.animation === "pop" || style.animation === "bounce") ? "scale(1.18)" : undefined,
+                          transition: "transform 80ms",
+                        }}
+                      >
+                        {style.uppercase ? w.text.toUpperCase() : w.text}
+                      </span>
+                    );
+                  })()
                 ))}
+                {style.emojis ? <span>{activeCue.text.match(/(argent|amour|rire|feu|peur|choc|police|maman|papa|chat|chien|secret|regarde)/i) ? "✨" : ""}</span> : null}
               </div>
             ) : null}
             {activeTexts.map((t) => (
@@ -614,7 +892,20 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
             ))}
           </div>
           <div className="min-w-0 space-y-2">
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap items-center gap-1">
+              <select onChange={(e) => { const t = TEMPLATES.find((x) => x.key === e.target.value); if (t) applyTemplate(t); e.target.value = ""; }} defaultValue="" className="rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs" title="Modèle de montage">
+                <option value="">🧩 Modèle…</option>
+                {TEMPLATES.map((t) => <option key={t.key} value={t.key} title={t.desc}>{t.label}</option>)}
+              </select>
+              <button onClick={undo} className="rounded-lg border border-zinc-700 px-2 py-1.5 text-xs hover:bg-zinc-800" title="Annuler (Ctrl+Z)">↶</button>
+              <button onClick={redo} className="rounded-lg border border-zinc-700 px-2 py-1.5 text-xs hover:bg-zinc-800" title="Rétablir (Ctrl+Y)">↷</button>
+              <select onChange={(e) => { if (e.target.value === "__new") newProject(); else if (e.target.value) openProject(e.target.value); e.target.value = ""; }} defaultValue="" className="rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs" title="Projets">
+                <option value="">📁 {projectId ? projectName : "Projets…"}</option>
+                <option value="__new">Nouveau montage</option>
+                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              <button onClick={saveAsProject} className="rounded-lg border border-zinc-700 px-2 py-1.5 text-xs hover:bg-zinc-800" title="Enregistrer comme projet">💾</button>
+              <span className="mx-1 h-5 w-px bg-zinc-700" />
               {toolBtn("clip", "🎬 Clip et effets")}
               {toolBtn("music", "🎵 Musique")}
               {toolBtn("subs", "💬 Sous-titres")}
@@ -645,6 +936,8 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
                     <div className="flex flex-wrap gap-1">
                       <button onClick={() => update(selected.uid, { mute: !selected.mute })} className="rounded-lg border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800">{selected.mute ? "🔇 Son coupé" : "🔊 Son du clip"}</button>
                       <button onClick={() => extractAudio(selected)} disabled={musicBusy} className="rounded-lg border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800">🎵 Extraire le son vers la musique</button>
+                      <button onClick={cutSilences} disabled={silBusy} className="rounded-lg border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800">{silBusy ? "Analyse…" : "✂️ Couper les silences"}</button>
+                      <button onClick={() => update(selected.uid, { smartCrop: !selected.smartCrop })} className={`rounded-lg border px-2 py-1 text-xs ${selected.smartCrop ? "border-green-500 text-green-300" : "border-zinc-700 hover:bg-zinc-800"}`} title="Recadrage vertical centré sur les personnes détectées (à l'export)">🙂 Recadrer sur les personnes</button>
                       <button onClick={() => move(-1)} className="rounded-lg border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800">◀ Avant</button>
                       <button onClick={() => move(1)} className="rounded-lg border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800">Après ▶</button>
                       <button onClick={duplicate} className="rounded-lg border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800">Dupliquer</button>
@@ -676,7 +969,7 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
                   <Field label="Piste musicale">
                     <select value={musicSel} onChange={(e) => setMusicSel(e.target.value)} className={inputCls}>
                       <option value="">Aucune</option>
-                      {music.map((m) => <option key={m.file} value={m.file}>{m.name}{m.durationS ? ` (${fmtDuration(m.durationS)})` : ""}</option>)}
+                      {music.map((m) => <option key={m.file} value={m.file}>{m.name}{m.durationS ? ` (${fmtDuration(m.durationS)}` : ""}{m.bpm ? `, ${m.bpm} bpm)` : m.durationS ? ")" : ""}</option>)}
                     </select>
                   </Field>
                   <p className="text-xs text-zinc-500">Importer ou extraire des musiques : onglet 🎵 Musiques du chutier. Pour remplacer le son d'un clip par la musique, coupe son son (outil Clip, « Son coupé »).</p>
@@ -698,6 +991,7 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
                         <input type="checkbox" checked={musicOpts.duck} onChange={(e) => setMusicOpts({ ...musicOpts, duck: e.target.checked })} className="accent-green-500" />
                         Baisser la musique quand on parle
                       </label>
+                      <button onClick={snapToBeat} className="col-span-2 rounded-lg border border-zinc-700 px-3 py-1.5 text-xs hover:bg-zinc-800">🥁 Caler les coupes sur le rythme ({music.find((m) => m.file === musicSel)?.bpm ?? "?"} bpm)</button>
                     </div>
                   ) : null}
                 </div>
@@ -714,6 +1008,12 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
                     </button>
                     <button onClick={addCue} className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs hover:bg-zinc-800">+ Ajouter au curseur</button>
                     {cues.length ? <button onClick={() => setCues([])} className="rounded-lg border border-red-900 px-3 py-1.5 text-xs text-red-300 hover:bg-red-950">Tout effacer</button> : null}
+                    {cues.length ? (
+                      <select onChange={(e) => { if (e.target.value) translateSubs(e.target.value); e.target.value = ""; }} defaultValue="" disabled={transBusy} className={inputCls + " max-w-44"}>
+                        <option value="">{transBusy ? "Traduction…" : "🌍 Traduire en…"}</option>
+                        {[["en", "Anglais"], ["es", "Espagnol"], ["de", "Allemand"], ["it", "Italien"], ["pt", "Portugais"], ["fr", "Français"]].map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                      </select>
+                    ) : null}
                   </div>
                   <p className="text-xs text-zinc-500">La première transcription locale télécharge le modèle (environ 80 Mo) ; avec OPENAI_API_KEY dans .env, c'est Whisper en ligne, plus rapide.</p>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -733,6 +1033,22 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
                     <Field label={`Taille ${style.size}`}>
                       <input type="range" min={40} max={160} step={2} value={style.size} onChange={(e) => setStyle({ ...style, size: Number(e.target.value) })} className="w-full accent-green-500" />
                     </Field>
+                    <Field label="Animation du mot">
+                      <select value={style.animation} onChange={(e) => setStyle({ ...style, animation: e.target.value as SubtitleStyle["animation"] })} className={inputCls}>
+                        <option value="pop">Grossit</option>
+                        <option value="box">Surlignage coloré</option>
+                        <option value="bounce">Rebond</option>
+                        <option value="none">Couleur seule</option>
+                      </select>
+                    </Field>
+                    <Field label="Police">
+                      <select value={style.font} onChange={(e) => setStyle({ ...style, font: e.target.value })} className={inputCls}>
+                        {FONTS.map((f) => <option key={f} value={f}>{f}</option>)}
+                      </select>
+                    </Field>
+                    <Field label={`Hauteur ${style.y !== undefined ? Math.round(style.y * 100) + " %" : "auto"}`}>
+                      <input type="range" min={0.1} max={0.95} step={0.01} value={style.y ?? (style.position === "top" ? 0.15 : style.position === "center" ? 0.5 : 0.78)} onChange={(e) => setStyle({ ...style, y: Number(e.target.value) })} className="w-full accent-green-500" />
+                    </Field>
                     <Field label="Mots par ligne">
                       <input type="number" min={1} max={10} value={style.maxWords} onChange={(e) => setStyle({ ...style, maxWords: Number(e.target.value) })} className={inputCls} />
                     </Field>
@@ -742,6 +1058,7 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
                     <div className="flex flex-col gap-1 pt-5 text-xs">
                       <label className="flex items-center gap-2"><input type="checkbox" checked={style.uppercase} onChange={(e) => setStyle({ ...style, uppercase: e.target.checked })} className="accent-green-500" /> Majuscules</label>
                       <label className="flex items-center gap-2"><input type="checkbox" checked={style.box} onChange={(e) => setStyle({ ...style, box: e.target.checked })} className="accent-green-500" /> Fond sombre</label>
+                      <label className="flex items-center gap-2"><input type="checkbox" checked={style.emojis} onChange={(e) => setStyle({ ...style, emojis: e.target.checked })} className="accent-green-500" /> Emojis auto</label>
                     </div>
                   </div>
                   <ul className="space-y-1">
@@ -814,6 +1131,14 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
                     </Field>
                     <Field label="Durée transition (s)"><input type="number" step="0.1" min={0.1} max={1.5} value={transition.durationS} onChange={(e) => setTransition({ ...transition, durationS: Number(e.target.value) })} className={inputCls} /></Field>
                     <Field label="Nom du fichier"><input value={name} onChange={(e) => setName(e.target.value)} placeholder="mon-montage" className={inputCls} /></Field>
+                    <label className="col-span-2 flex items-center gap-2 text-sm sm:col-span-4"><input type="checkbox" checked={cover.on} onChange={(e) => setCover({ ...cover, on: e.target.checked })} className="accent-green-500" /> Image de couverture (image à l'instant choisi + titre)</label>
+                    {cover.on ? (
+                      <>
+                        <Field label="Instant (s)"><input type="number" step="0.5" min={0} value={cover.atS} onChange={(e) => setCover({ ...cover, atS: Number(e.target.value) })} className={inputCls} /></Field>
+                        <button onClick={() => setCover({ ...cover, atS: Math.round(head * 10) / 10 })} className="mt-5 rounded-lg border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800">Prendre le curseur</button>
+                        <div className="col-span-2"><Field label="Titre sur la couverture"><input value={cover.title} onChange={(e) => setCover({ ...cover, title: e.target.value })} className={inputCls} placeholder="Gros titre" /></Field></div>
+                      </>
+                    ) : null}
                   </div>
                   <button onClick={exportNow} disabled={!clips.length} className="w-full rounded-xl bg-green-500 px-4 py-2 text-sm font-semibold text-black hover:bg-green-400 disabled:opacity-50">
                     Exporter en MP4 ({clips.length} clip{clips.length > 1 ? "s" : ""}, {fmtS(total)}{cues.length ? `, ${cues.length} sous-titres` : ""}{texts.length ? `, ${texts.length} texte(s)` : ""})
@@ -831,8 +1156,10 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
                         {e.url ? (
                           <div className="mt-2 flex gap-2">
                             <video src={e.url} controls className="h-36 rounded bg-black" />
+                            {e.coverUrl ? <img src={e.coverUrl} alt="" className="h-36 rounded" /> : null}
                             <div className="flex flex-col justify-end gap-1">
                               <button onClick={() => setPublish({ source: { kind: "montage", id: e.id }, title: e.name })} className="rounded-lg bg-green-500 px-3 py-1.5 text-xs font-semibold text-black hover:bg-green-400">📣 Publier partout</button>
+                              {e.coverUrl ? <a href={e.coverUrl} download className="rounded-lg border border-zinc-700 px-3 py-1.5 text-center text-xs hover:bg-zinc-800">Couverture</a> : null}
                               <a href={e.url} download className="rounded-lg border border-zinc-700 px-3 py-1.5 text-center text-xs hover:bg-zinc-800">Télécharger</a>
                             </div>
                           </div>
@@ -857,7 +1184,8 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
           <button onClick={() => goTo(head - 0.1)} className="rounded-lg border border-zinc-700 px-2 py-1.5 hover:bg-zinc-800">-0,1</button>
           <button onClick={() => goTo(head + 0.1)} className="rounded-lg border border-zinc-700 px-2 py-1.5 hover:bg-zinc-800">+0,1</button>
           <button onClick={() => goTo(head + 1)} className="rounded-lg border border-zinc-700 px-2 py-1.5 hover:bg-zinc-800">+1 s</button>
-          <span className="ml-auto text-xs text-zinc-500">Glisse sur la barre pour avancer ou reculer, tire les bords d'un clip pour le couper. Clavier : espace, ← →, S couper, I début, O fin, Suppr.</span>
+          <label className="flex items-center gap-1 text-xs text-zinc-400"><input type="checkbox" checked={showThumbs} onChange={(e) => setShowThumbs(e.target.checked)} className="accent-green-500" /> Miniatures et onde</label>
+          <span className="ml-auto text-xs text-zinc-500">Glisse sur la barre, tire les bords d'un clip. Clavier : espace, ← →, S, I, O, Suppr, Ctrl+Z / Ctrl+Y.</span>
         </div>
         <div
           ref={trackRef}
@@ -880,8 +1208,30 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
                 className={`relative h-full overflow-hidden border-r border-black/50 px-3 py-1 text-xs ${sel === c.uid ? "ring-2 ring-inset ring-green-400" : ""}`}
                 title={`${c.name} : ${fmtS(c.inS)} à ${fmtS(c.outS)}`}
               >
-                <div className="truncate font-medium">{c.name}</div>
-                <div className="truncate text-[10px] opacity-80">{fmtS(c.inS)} → {fmtS(c.outS)} {c.speed !== 1 ? `· x${c.speed}` : ""} {c.mute ? "· 🔇" : ""} {c.effects.length ? `· ${c.effects.length} effet(s)` : ""}</div>
+                {showThumbs ? (
+                  <div
+                    className="pointer-events-none absolute inset-0 opacity-70"
+                    style={{
+                      backgroundImage: `url(${api.thumbsUrl(c.source)})`,
+                      backgroundSize: `${(c.durationS / Math.max(0.1, c.outS - c.inS)) * 100}% 100%`,
+                      backgroundPosition: `${(c.inS / Math.max(0.1, c.durationS - (c.outS - c.inS))) * 100}% 0`,
+                      backgroundRepeat: "no-repeat",
+                    }}
+                  />
+                ) : null}
+                {showThumbs && !c.mute ? (
+                  <div
+                    className="pointer-events-none absolute bottom-0 left-0 h-1/3 w-full opacity-80"
+                    style={{
+                      backgroundImage: `url(${api.waveUrl(c.source)})`,
+                      backgroundSize: `${(c.durationS / Math.max(0.1, c.outS - c.inS)) * 100}% 100%`,
+                      backgroundPosition: `${(c.inS / Math.max(0.1, c.durationS - (c.outS - c.inS))) * 100}% 0`,
+                      backgroundRepeat: "no-repeat",
+                    }}
+                  />
+                ) : null}
+                <div className="relative truncate font-medium drop-shadow">{c.name}</div>
+                <div className="relative truncate text-[10px] opacity-90 drop-shadow">{fmtS(c.inS)} → {fmtS(c.outS)} {c.speed !== 1 ? `· x${c.speed}` : ""} {c.mute ? "· 🔇" : ""} {c.effects.length ? `· ${c.effects.length} effet(s)` : ""}</div>
                 <div onPointerDown={(e) => startTrim(e, c, "in")} className="absolute left-0 top-0 h-full w-2 cursor-ew-resize bg-white/20 hover:bg-green-400/70" title="Tirer pour couper le début" />
                 <div onPointerDown={(e) => startTrim(e, c, "out")} className="absolute right-0 top-0 h-full w-2 cursor-ew-resize bg-white/20 hover:bg-green-400/70" title="Tirer pour couper la fin" />
               </div>

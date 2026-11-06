@@ -107,6 +107,23 @@ Onglet ✂️ Montage : un chutier (vidéos relevées, enregistrements et fichie
 - **Textes** : titres et mentions avec moment, taille, couleur, position et animation (pop, fondu).
 - **Export** : format (1080x1920, 1080x1080, 1920x1080 ou libre), recadrage « remplir » ou « tout voir », transitions entre clips (fondu, fondu au noir, glissements, volets, cercle, pixels…), fondu global ; progression, lecture et téléchargement (`data/renders/montage-*.mp4`).
 
+### Et aussi dans le montage
+
+- **Modèles** (menu 🧩) : Storytime, Avant/Après, Top 3, Réaction, Teaser, Astuce : style de sous-titres, transition, textes et effets déjà réglés.
+- **Annuler / rétablir** (Ctrl+Z, Ctrl+Y), sauvegarde automatique du montage en cours (repris à l'ouverture) et projets nommés (💾, menu 📁) dans `data/projects/`.
+- **Timeline** : miniatures et onde sonore sur chaque clip, défilement en glissant, coupes en tirant les bords, raccourcis clavier ; aperçu en direct des effets, des sous-titres animés et des textes.
+- **Clip** : « Couper les silences » (détection ffmpeg, le clip devient plusieurs morceaux parlés), « Recadrer sur les personnes » (détection locale des personnes sur trois images du clip, recadrage vertical centré sur elles à l'export).
+- **Sous-titres animés** : mot qui grossit, surlignage coloré, rebond ; emojis automatiques sur les mots clés ; polices Anton, Permanent Marker, Rubik Spray Paint, Lobster ; hauteur réglable ; traduction des sous-titres en un clic.
+- **Musique** : tempo détecté à l'import, « Caler les coupes sur le rythme » ajuste la fin de chaque clip sur un nombre entier de temps.
+- **Couverture** : image à l'instant choisi avec un titre incrusté, exportée à côté du MP4 (vignette YouTube, couverture TikTok).
+
+## Veille, planning et suivi
+
+- Onglet Viral → « 📊 Ce qui marche dans ta niche » : hashtags, comptes et durées des vidéos virales de la période, heures de publication.
+- Alerte 🏆 « record du compte » quand une vidéo fait au moins 3 fois la moyenne des 10 dernières du même compte.
+- Onglet 📅 Planning : publications programmées via Postiz jour par jour, rappels Telegram 30 min avant, repères des meilleures heures par réseau, statistiques des posts envoyés (« 📈 Stats », via Postiz).
+- Recréations : « 🌍 Version en… » refait la même vidéo dans une autre langue (script traduit, nouvelle voix, nouveau rendu).
+
 ## Enregistreur d'écran
 
 Onglet 🎥 Enregistreur : choisir un écran, une fenêtre ou un onglet, puis régler la zone de capture (déplacer, redimensionner par le coin, ou tracer ; forme 9:16, carrée, 16:9 ou libre) et la taille de sortie (1080x1920, 1080x1080, 1920x1080, 720x1280 ou toute taille). Son du système si le navigateur le fournit, micro en option, 24 à 60 images par seconde. À l'arrêt : aperçu, téléchargement WebM, ou « Garder dans Niche » qui convertit en MP4 H.264 (ffmpeg embarqué) dans `data/public/captures/`. Un enregistrement gardé se choisit ensuite comme fond des scènes sans clip dans la fenêtre « Recréer » (il défile d'une scène à l'autre). Chrome ou Edge conseillés.

@@ -20,6 +20,12 @@ export type SubtitleStyle = {
   box: boolean; // fond semi-transparent
   uppercase: boolean;
   maxWords: number;
+  /** Animation du mot en cours (karaoké) : pop = grossit, box = surlignage coloré derrière, none = couleur seule. */
+  animation: "none" | "pop" | "box" | "bounce";
+  /** Emojis automatiques sur les mots clés. */
+  emojis: boolean;
+  /** Position verticale fine (0 = haut, 1 = bas) ; prime sur position si défini. */
+  y?: number;
 };
 
 export type TextItem = {
@@ -46,7 +52,43 @@ export const DEFAULT_STYLE: SubtitleStyle = {
   box: false,
   uppercase: true,
   maxWords: 4,
+  animation: "pop",
+  emojis: false,
 };
+
+const EMOJI_MAP: [RegExp, string][] = [
+  [/\b(argent|money|cash|euros?|dollars?|riche)\b/i, "💸"],
+  [/\b(amour|love|coeur|cœur|couple)\b/i, "❤️"],
+  [/\b(rire|mdr|lol|dr[ôo]le|funny)\b/i, "😂"],
+  [/\b(feu|fire|chaud|hot)\b/i, "🔥"],
+  [/\b(peur|scary|horreur)\b/i, "😱"],
+  [/\b(choc|choqu|shock|incroyable|insane|crazy|fou|folle)\b/i, "🤯"],
+  [/\b(non|jamais|never|stop)\b/i, "🚫"],
+  [/\b(oui|yes|ok|d'accord)\b/i, "✅"],
+  [/\b(police|flic|cops?)\b/i, "🚔"],
+  [/\b(maman|mère|mom|mother)\b/i, "👩"],
+  [/\b(papa|père|dad|father)\b/i, "👨"],
+  [/\b(bébé|baby|enfant|kid)\b/i, "👶"],
+  [/\b(chat|cat)\b/i, "🐱"],
+  [/\b(chien|dog)\b/i, "🐶"],
+  [/\b(manger|food|pizza|burger|faim)\b/i, "🍕"],
+  [/\b(dormir|sleep|sommeil)\b/i, "😴"],
+  [/\b(travail|boulot|work|job)\b/i, "💼"],
+  [/\b(école|school|prof)\b/i, "🏫"],
+  [/\b(voiture|car|bagnole)\b/i, "🚗"],
+  [/\b(téléphone|phone|tel)\b/i, "📱"],
+  [/\b(attention|warning|danger)\b/i, "⚠️"],
+  [/\b(secret|cach[ée]|hidden)\b/i, "🤫"],
+  [/\b(gagn|win|victoire|champion)\b/i, "🏆"],
+  [/\b(perdu|lose|perd|fail)\b/i, "💀"],
+  [/\b(temps|time|heure)\b/i, "⏰"],
+  [/\b(regarde|look|watch|vois)\b/i, "👀"],
+];
+
+export function emojiFor(text: string): string | null {
+  for (const [re, e] of EMOJI_MAP) if (re.test(text)) return e;
+  return null;
+}
 
 // ---- Transcription -----------------------------------------------------------
 
@@ -179,8 +221,10 @@ export function buildAss(opts: { width: number; height: number; cues: Cue[]; sty
   const scale = H / 1920;
   const size = Math.round(style.size * scale);
   const margin = Math.round(40 * scale);
-  const marginV = style.position === "bottom" ? Math.round(420 * scale) : style.position === "top" ? Math.round(260 * scale) : 0;
-  const align = style.position === "bottom" ? 2 : style.position === "top" ? 8 : 5;
+  const yPos = typeof style.y === "number" ? Math.round(style.y * H) : null;
+  const marginV = yPos !== null ? 0 : style.position === "bottom" ? Math.round(420 * scale) : style.position === "top" ? Math.round(260 * scale) : 0;
+  const align = yPos !== null ? 5 : style.position === "bottom" ? 2 : style.position === "top" ? 8 : 5;
+  const posTag = yPos !== null ? `{\\pos(${Math.round(W / 2)},${yPos})}` : "";
   const outline = Math.max(1, Math.round(4 * scale));
   const shadow = Math.round(3 * scale);
   const lines: string[] = [
@@ -206,6 +250,29 @@ export function buildAss(opts: { width: number; height: number; cues: Cue[]; sty
     const start = Math.max(0, cue.start);
     const end = Math.max(start + 0.2, cue.end);
     let text: string;
+    const emoji = style.emojis ? emojiFor(cue.text) : null;
+    const suffix = emoji ? " " + emoji : "";
+    if (style.mode === "karaoke" && style.animation !== "none") {
+      // Une ligne par mot actif : le mot en cours est agrandi, surligné ou coloré ; les autres gardent la couleur de base.
+      const hl = assColor(style.highlight);
+      const base = assColor(style.color);
+      for (let wi = 0; wi < words.length; wi++) {
+        const w = words[wi];
+        const wStart = Math.max(start, wi === 0 ? start : w.start);
+        const wEnd = Math.max(wStart + 0.05, wi === words.length - 1 ? end : words[wi + 1].start);
+        const parts = words.map((x, i) => {
+          const body = esc(style.uppercase ? x.text.toUpperCase() : x.text);
+          if (i !== wi) return `{\\1c${base}\\fscx100\\fscy100\\bord${outline}\\3c${assColor(style.outline)}}${body}`;
+          if (style.animation === "pop") return `{\\1c${hl}\\fscx118\\fscy118}${body}{\\fscx100\\fscy100}`;
+          if (style.animation === "bounce") return `{\\1c${hl}\\fscx125\\fscy125\\t(0,120,\\fscx108\\fscy108)}${body}{\\fscx100\\fscy100}`;
+          // box : contour épais de la couleur de surlignage, texte foncé
+          return `{\\1c&H101010&\\bord${Math.round(outline * 2.6)}\\3c${hl}}${body}{\\bord${outline}\\3c${assColor(style.outline)}}`;
+        });
+        const line = `${posTag}${parts.join(" ")}${suffix ? esc(suffix) : ""}`;
+        lines.push(`Dialogue: 0,${assTime(wStart)},${assTime(wEnd)},Sub,,0,0,0,,${line}`);
+      }
+      continue;
+    }
     if (style.mode === "karaoke") {
       // Chaque mot reçoit sa durée en centièmes ; le premier commence dès l'ouverture.
       let t = start;
@@ -220,10 +287,10 @@ export function buildAss(opts: { width: number; height: number; cues: Cue[]; sty
         })
         .join(" ");
     } else {
-      text = esc(style.uppercase ? cue.text.toUpperCase() : cue.text);
+      text = esc(style.uppercase ? cue.text.toUpperCase() : cue.text) + (suffix ? esc(suffix) : "");
     }
     const pop = `{\\fad(80,80)}`;
-    lines.push(`Dialogue: 0,${assTime(start)},${assTime(end)},Sub,,0,0,0,,${pop}${text}`);
+    lines.push(`Dialogue: 0,${assTime(start)},${assTime(end)},Sub,,0,0,0,,${posTag}${pop}${text}`);
   }
   for (const t of texts) {
     if (!t.text.trim() || t.end <= t.start) continue;

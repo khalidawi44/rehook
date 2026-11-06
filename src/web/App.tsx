@@ -3,6 +3,8 @@ import { api, fmtClock, fmtNum, timeAgo, type Alert, type Job, type Stats, type 
 import { AlertsPanel } from "./components/AlertsPanel";
 import { RecorderPanel } from "./components/RecorderPanel";
 import { MontagePanel } from "./components/MontagePanel";
+import { TrendsPanel } from "./components/TrendsPanel";
+import { PlanningPanel } from "./components/PlanningPanel";
 import { VideoCard } from "./components/VideoCard";
 import { VideoModal } from "./components/VideoModal";
 import { RecreateModal } from "./components/RecreateModal";
@@ -11,7 +13,7 @@ import { AccountsPanel } from "./components/AccountsPanel";
 import { SettingsModal } from "./components/SettingsModal";
 import { ImportModal } from "./components/ImportModal";
 
-type Tab = "viral" | "all" | "accounts" | "jobs" | "alerts" | "recorder" | "montage";
+type Tab = "viral" | "all" | "accounts" | "jobs" | "alerts" | "recorder" | "montage" | "planning";
 
 const PERIODS = [
   { k: "24h", l: "24 h" },
@@ -216,6 +218,9 @@ export const App: React.FC = () => {
           <TabBtn active={tab === "montage"} onClick={() => setTab("montage")}>
             ✂️ Montage
           </TabBtn>
+          <TabBtn active={tab === "planning"} onClick={() => setTab("planning")}>
+            📅 Planning
+          </TabBtn>
           <TabBtn active={tab === "jobs"} onClick={() => setTab("jobs")}>
             🎬 Recréations {activeJobs ? <span className="ml-1 rounded-full bg-green-500 px-2 text-xs font-bold text-black">{activeJobs}</span> : <Count n={jobs.length} />}
           </TabBtn>
@@ -223,6 +228,7 @@ export const App: React.FC = () => {
 
         {tab === "viral" || tab === "all" ? (
           <>
+            {tab === "viral" ? <TrendsPanel /> : null}
             <div className="my-4 flex flex-wrap items-center gap-2 text-sm">
               <div className="flex overflow-hidden rounded-lg border border-zinc-700">
                 {PERIODS.map((p) => (
@@ -312,6 +318,7 @@ export const App: React.FC = () => {
         {tab === "jobs" ? <JobsPanel jobs={jobs} reload={loadJobs} notify={notify} /> : null}
         {tab === "recorder" ? <RecorderPanel notify={notify} /> : null}
         {tab === "montage" ? <MontagePanel notify={notify} /> : null}
+        {tab === "planning" ? <PlanningPanel notify={notify} /> : null}
         {tab === "alerts" ? (
           <AlertsPanel
             alerts={alerts}

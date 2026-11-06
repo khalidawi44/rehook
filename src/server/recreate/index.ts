@@ -10,6 +10,7 @@ import { analyzeSource, type SourceAnalysis } from "./analyze.js";
 import { imageProvider, makeImages } from "./images.js";
 import { findStockClips } from "./stock.js";
 import { capturePath } from "../captures.js";
+import { translateBrief } from "../translate.js";
 import { makeVoices, voiceProvider } from "./voice.js";
 import { renderVideo } from "./render.js";
 import type { NicheProps } from "../../video/types.js";
@@ -24,6 +25,7 @@ export type JobOptions = BriefOptions & {
   handle?: string; // signature affichée en fin de vidéo
   reuseBrief?: boolean; // regénérer seulement la vidéo à partir du brief existant
   backgroundCapture?: string | null; // id d'un enregistrement d'écran utilisé en fond des scènes sans clip
+  translateTo?: string | null; // doublage : même script traduit, nouvelle voix et nouveau rendu
 };
 
 function update(id: number, patch: Partial<Pick<JobRow, "status" | "step" | "progress" | "brief" | "output_file" | "error">>, logLine?: string) {
@@ -68,6 +70,17 @@ export function retryJob(jobId: number, options: JobOptions): JobRow | null {
   return db.prepare("SELECT * FROM jobs WHERE id = ?").get(jobId) as JobRow;
 }
 
+/** Doublage : nouveau job qui reprend le brief d'un job terminé, traduit dans une autre langue. */
+export function dubJob(jobId: number, to: string): JobRow | null {
+  const job = db.prepare("SELECT * FROM jobs WHERE id = ?").get(jobId) as JobRow | undefined;
+  if (!job?.brief) return null;
+  const opts = { ...(JSON.parse(job.options) as JobOptions), reuseBrief: true, translateTo: to, language: to };
+  const t = now();
+  const r = db.prepare("INSERT INTO jobs(video_id, options, brief, created_at, updated_at) VALUES(?, ?, ?, ?, ?)").run(job.video_id, JSON.stringify(opts), job.brief, t, t);
+  kick();
+  return db.prepare("SELECT * FROM jobs WHERE id = ?").get(Number(r.lastInsertRowid)) as JobRow;
+}
+
 let working = false;
 
 function kick() {
@@ -110,6 +123,12 @@ async function runJob(job: JobRow) {
   if (opts.reuseBrief && job.brief) {
     brief = JSON.parse(job.brief) as Brief;
     log("script : brief existant réutilisé");
+    if (opts.translateTo && opts.translateTo !== brief.language) {
+      update(job.id, { step: "Traduction", progress: 0.1 });
+      const analysis = (brief as Brief & { analysis?: BriefAnalysis }).analysis;
+      brief = { ...(await translateBrief(brief, opts.translateTo, log)), analysis } as Brief & { analysis?: BriefAnalysis };
+      update(job.id, { brief: JSON.stringify(brief) });
+    }
     update(job.id, { progress: 0.25, step: "Images" });
   } else {
     const analysis: SourceAnalysis = await analyzeSource(video, log, (p) => update(job.id, { progress: 0.02 + 0.13 * p }));
