@@ -117,7 +117,7 @@ export type MontageRequest = {
   cover?: { atS: number; title: string } | null;
 };
 export type MontageSources = {
-  videos: { id: string; name: string; durationS: number | null; cover: string | null; url: string }[];
+  videos: { id: string; name: string; handle: string; durationS: number | null; cover: string | null; url: string; views: number; postedAt: number | null; favorite: boolean; followed: boolean }[];
   captures: { id: string; name: string; durationS: number; url: string }[];
   renders: { id: string; name: string; url: string }[];
 };
@@ -294,6 +294,26 @@ export const api = {
     return body as Capture;
   },
   deleteCapture: (id: string) => req<{ ok: boolean }>(`/api/captures/${id}`, { method: "DELETE" }),
+  /** Envoi avec progression, puis conversion suivie par captureJob(). */
+  uploadCaptureAsync: (blob: Blob, name: string, durationS: number, onProgress: (p: number) => void) =>
+    new Promise<{ jobId: string }>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `/api/captures?async=1&name=${encodeURIComponent(name)}&durationS=${durationS}`);
+      xhr.setRequestHeader("Content-Type", blob.type || "video/webm");
+      xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
+      xhr.onload = () => {
+        try {
+          const j = JSON.parse(xhr.responseText);
+          if (xhr.status >= 200 && xhr.status < 300) resolve(j);
+          else reject(new Error(j.error ?? `Erreur ${xhr.status}`));
+        } catch {
+          reject(new Error(`Erreur ${xhr.status}`));
+        }
+      };
+      xhr.onerror = () => reject(new Error("Envoi interrompu"));
+      xhr.send(blob);
+    }),
+  captureJob: (id: string) => req<{ id: string; status: "running" | "done" | "error"; progress: number; capture: Capture | null; error: string | null }>(`/api/captures/jobs/${id}`),
   publication: (source: PublishSource) => req<Publication>("/api/publish/get", { method: "POST", body: JSON.stringify({ source }) }),
   publishTexts: (source: PublishSource, o: { hint: string; extra: string; language: string }) => req<Publication>("/api/publish/texts", { method: "POST", body: JSON.stringify({ source, ...o }) }),
   savePublication: (key: string, texts: Texts) => req<Publication>(`/api/publish/${key}`, { method: "PUT", body: JSON.stringify({ texts }) }),

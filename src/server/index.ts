@@ -10,7 +10,7 @@ import { listCards, stats, toCard, type ListQuery } from "./metrics.js";
 import { discoveryMode, importUrls, log, runCollection, runState, runWatch, scheduleRefresh } from "./collector.js";
 import { listAlerts, markSeen, unseenCount } from "./alerts.js";
 import { listPacks, loadPack } from "./packs/index.js";
-import { deleteCapture, listCaptures, saveCapture } from "./captures.js";
+import { deleteCapture, getConvertJob, listCaptures, saveCapture, startCaptureConversion } from "./captures.js";
 import { ensureSourceFile } from "./recreate/analyze.js";
 import { CLIP_EFFECTS, deleteMusic, getMontage, listMontages, listMusic, montageSources, saveMusic, startMontage, transcribeMontage, type ClipEffect, type MontageRequest } from "./montage.js";
 import { ensureSourceFile as ensureSource } from "./recreate/analyze.js";
@@ -320,9 +320,18 @@ app.post(
   asyncRoute(async (req, res) => {
     const body = req.body as Buffer;
     if (!body?.length) return void res.status(400).json({ error: "Fichier vide" });
+    if (req.query.async === "1") {
+      const job = startCaptureConversion(body, String(req.query.name ?? ""), Number(req.query.durationS ?? 0));
+      return void res.json({ jobId: job.id });
+    }
     res.json(await saveCapture(body, String(req.query.name ?? "")));
   }),
 );
+app.get("/api/captures/jobs/:id", (req, res) => {
+  const j = getConvertJob(String(req.params.id));
+  if (!j) return res.status(404).json({ error: "Conversion introuvable" });
+  res.json(j);
+});
 app.delete("/api/captures/:id", (req, res) => res.json({ ok: deleteCapture(String(req.params.id)) }));
 
 // ---- Montage -----------------------------------------------------------------

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api, fmtDuration, fmtNum, timeAgo, type Snapshot, type VideoCard } from "../api";
 import { Modal } from "./Modal";
+import { sendToMontage } from "../montageQueue";
 
 export const VideoModal: React.FC<{
   card: VideoCard;
@@ -75,6 +76,15 @@ export const VideoModal: React.FC<{
           <div className="flex flex-wrap gap-2 pt-2">
             <button onClick={onRecreate} className="rounded-xl bg-green-500 px-4 py-2 font-semibold text-black hover:bg-green-400">
               ↻ Recréer cette vidéo
+            </button>
+            <button
+              onClick={() => {
+                sendToMontage({ source: { kind: "video", id: String(card.id) }, name: `@${card.account.handle} : ${card.caption.slice(0, 60)}`, url: `/api/videos/${card.id}/media`, durationS: card.durationS });
+                onClose();
+              }}
+              className="rounded-xl border border-green-700 px-4 py-2 text-green-300 hover:bg-green-950"
+            >
+              ✂️ Envoyer au montage
             </button>
             <button onClick={onFavorite} className="rounded-xl border border-zinc-700 px-4 py-2 hover:bg-zinc-800">
               {card.favorite ? "★ Favori" : "☆ Mettre en favori"}

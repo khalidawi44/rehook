@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { api, timeAgo, type Brief, type Job, type PublishSource } from "../api";
 import { PublishPanel } from "./PublishPanel";
+import { sendToMontage } from "../montageQueue";
 
 const STEPS = ["Analyse de la vidéo source", "Script", "Images", "Voix off", "Rendu vidéo", "Terminé"];
 
@@ -78,6 +79,9 @@ const JobRow: React.FC<{ job: Job; open: boolean; toggle: () => void; reload: ()
                 <a href={`/renders/${job.output_file}`} download className="mt-2 block rounded-lg border border-zinc-700 px-3 py-2 text-center text-sm hover:bg-zinc-800">
                   Télécharger le MP4
                 </a>
+                <button onClick={() => sendToMontage({ source: { kind: "render", id: String(job.id) }, name: brief?.title ?? `Recréation #${job.id}`, url: `/renders/${job.output_file}`, durationS: null })} className="mt-2 block w-full rounded-lg border border-green-700 px-3 py-2 text-center text-sm text-green-300 hover:bg-green-950">
+                  ✂️ Envoyer au montage
+                </button>
               </>
             ) : (
               <div className="grid aspect-[9/16] place-items-center rounded-xl bg-zinc-900 text-sm text-zinc-500">

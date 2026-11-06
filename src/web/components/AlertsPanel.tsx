@@ -1,5 +1,6 @@
 import React from "react";
 import { api, fmtNum, timeAgo, type Alert } from "../api";
+import { sendToMontage } from "../montageQueue";
 
 export const AlertsPanel: React.FC<{ alerts: Alert[]; reload: () => void; onOpenVideo: (id: number) => void; notifPermission: string; askNotif: () => void }> = ({
   alerts,
@@ -51,6 +52,9 @@ export const AlertsPanel: React.FC<{ alerts: Alert[]; reload: () => void; onOpen
             <a href={a.video.url} target="_blank" rel="noreferrer" className="rounded-lg border border-zinc-700 px-3 py-1.5 text-center text-xs hover:bg-zinc-800">
               TikTok ↗
             </a>
+            <button onClick={() => sendToMontage({ source: { kind: "video", id: String(a.video.id) }, name: `@${a.video.handle} : ${a.video.caption.slice(0, 60)}`, url: `/api/videos/${a.video.id}/media`, durationS: null })} className="rounded-lg border border-green-700 px-3 py-1.5 text-xs text-green-300 hover:bg-green-950">
+              ✂️ Montage
+            </button>
           </div>
         </div>
       ))}

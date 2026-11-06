@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { api, fmtDuration, timeAgo, type Capture } from "../api";
 import { Field, inputCls } from "./Modal";
+import { sendToMontage } from "../montageQueue";
 
 type Rect = { x: number; y: number; w: number; h: number };
 type Aspect = "9:16" | "1:1" | "16:9" | "free";
@@ -33,6 +34,7 @@ export const RecorderPanel: React.FC<{ notify: (m: string) => void }> = ({ notif
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [saving, setSaving] = useState(false);
+  const [saveProgress, setSaveProgress] = useState<{ phase: "envoi" | "conversion"; p: number } | null>(null);
   const [name, setName] = useState("");
   const recorderRef = useRef<MediaRecorder | null>(null);
   const rafRef = useRef<number>(0);
@@ -95,7 +97,7 @@ export const RecorderPanel: React.FC<{ notify: (m: string) => void }> = ({ notif
     const draw = () => {
       if (!alive) return;
       const maxW = canvas.parentElement?.clientWidth ?? 640;
-      const scale = Math.min(maxW / src.w, 420 / src.h);
+      const scale = Math.min(maxW / src.w, Math.max(320, window.innerHeight * 0.62) / src.h);
       canvas.width = Math.round(src.w * scale);
       canvas.height = Math.round(src.h * scale);
       const ctx = canvas.getContext("2d")!;
@@ -238,9 +240,19 @@ export const RecorderPanel: React.FC<{ notify: (m: string) => void }> = ({ notif
   const save = async () => {
     if (!blob) return;
     setSaving(true);
+    setSaveProgress({ phase: "envoi", p: 0 });
     try {
-      const r = await api.saveCapture(blob, name || `capture-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}`);
-      notify(`Enregistrement converti en MP4 (${fmtDuration(r.durationS)})`);
+      const label = name || `capture-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}`;
+      const { jobId } = await api.uploadCaptureAsync(blob, label, elapsed, (p) => setSaveProgress({ phase: "envoi", p }));
+      setSaveProgress({ phase: "conversion", p: 0 });
+      let job = await api.captureJob(jobId);
+      while (job.status === "running") {
+        await new Promise((r) => setTimeout(r, 700));
+        job = await api.captureJob(jobId);
+        setSaveProgress({ phase: "conversion", p: job.progress });
+      }
+      if (job.status === "error" || !job.capture) throw new Error(job.error ?? "Conversion échouée");
+      notify(`Enregistrement converti en MP4 (${fmtDuration(job.capture.durationS)})`);
       setBlob(null);
       setBlobUrl(null);
       setName("");
@@ -249,6 +261,7 @@ export const RecorderPanel: React.FC<{ notify: (m: string) => void }> = ({ notif
       notify((e as Error).message);
     } finally {
       setSaving(false);
+      setSaveProgress(null);
     }
   };
 
@@ -307,11 +320,20 @@ export const RecorderPanel: React.FC<{ notify: (m: string) => void }> = ({ notif
         {blobUrl ? (
           <div className="rounded-xl border border-zinc-800 p-3">
             <div className="mb-2 text-sm font-medium">Enregistrement terminé ({fmtDuration(elapsed)})</div>
-            <video src={blobUrl} controls className="max-h-80 rounded-lg bg-black" />
+            <video src={blobUrl} controls className="max-h-[50vh] rounded-lg bg-black" />
+            {saveProgress ? (
+              <div className="mt-3">
+                <div className="mb-1 flex justify-between text-xs text-zinc-400">
+                  <span>{saveProgress.phase === "envoi" ? "1/2 Envoi au serveur" : "2/2 Conversion MP4"}</span>
+                  <span>{Math.round(saveProgress.p * 100)} %</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded bg-zinc-800"><div className="h-full bg-green-500 transition-all" style={{ width: `${saveProgress.p * 100}%` }} /></div>
+              </div>
+            ) : null}
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom de l'enregistrement" className={inputCls + " max-w-xs"} />
               <button onClick={save} disabled={saving} className="rounded-lg bg-green-500 px-4 py-2 text-sm font-semibold text-black hover:bg-green-400 disabled:opacity-50">
-                {saving ? "Conversion MP4…" : "Garder dans Niche (MP4)"}
+                {saving ? (saveProgress?.phase === "envoi" ? "Envoi…" : "Conversion…") : "Garder dans Niche (MP4)"}
               </button>
               <a href={blobUrl} download={`${name || "capture"}.webm`} className="rounded-lg border border-zinc-700 px-4 py-2 text-sm hover:bg-zinc-800">
                 Télécharger le WebM
@@ -366,19 +388,18 @@ export const RecorderPanel: React.FC<{ notify: (m: string) => void }> = ({ notif
           <ul className="space-y-2">
             {captures.map((c) => (
               <li key={c.id} className="flex items-center gap-2 text-sm">
-                <video src={c.url} className="h-14 w-10 rounded bg-black object-cover" muted />
+                <video src={c.url} className="h-24 w-16 rounded bg-black object-cover" muted preload="metadata" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium">{c.name}</div>
                   <div className="text-xs text-zinc-500">
                     {fmtDuration(c.durationS)} · {c.width}x{c.height} · {timeAgo(c.createdAt)}
                   </div>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    <button onClick={() => sendToMontage({ source: { kind: "capture", id: c.id }, name: c.name, url: c.url, durationS: c.durationS })} className="rounded-lg border border-green-700 px-2 py-0.5 text-xs text-green-300 hover:bg-green-950">✂️ Montage</button>
+                    <a href={c.url} download className="rounded-lg border border-zinc-700 px-2 py-0.5 text-xs hover:bg-zinc-800">MP4</a>
+                    <button onClick={() => remove(c)} className="rounded-lg border border-red-900 px-2 py-0.5 text-xs text-red-300 hover:bg-red-950">Supprimer</button>
+                  </div>
                 </div>
-                <a href={c.url} download className="text-xs text-green-400 hover:underline">
-                  MP4
-                </a>
-                <button onClick={() => remove(c)} className="text-xs text-red-300 hover:underline">
-                  Suppr.
-                </button>
               </li>
             ))}
           </ul>

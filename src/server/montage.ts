@@ -93,10 +93,12 @@ async function hasAudio(file: string): Promise<boolean> {
 export async function montageSources() {
   const videos = db
     .prepare(
-      `SELECT v.id, v.caption, v.duration_s, v.cover_file, v.cover_url, a.handle FROM videos v JOIN accounts a ON a.id = v.account_id
-       WHERE v.source <> 'demo' ORDER BY v.last_seen_at DESC LIMIT 300`,
+      `SELECT v.id, v.caption, v.duration_s, v.cover_file, v.cover_url, v.posted_at, v.favorite, a.handle, a.followed,
+              (SELECT MAX(s.views) FROM snapshots s WHERE s.video_id = v.id) AS views
+       FROM videos v JOIN accounts a ON a.id = v.account_id
+       WHERE v.source <> 'demo' ORDER BY v.last_seen_at DESC LIMIT 600`,
     )
-    .all() as { id: number; caption: string; duration_s: number | null; cover_file: string | null; cover_url: string | null; handle: string }[];
+    .all() as { id: number; caption: string; duration_s: number | null; cover_file: string | null; cover_url: string | null; posted_at: number | null; favorite: number; handle: string; followed: number; views: number | null }[];
   const renders = (db.prepare("SELECT id, brief, created_at FROM jobs WHERE status = 'done' AND output_file IS NOT NULL ORDER BY id DESC").all() as { id: number; brief: string | null; created_at: number }[])
     .filter((j) => fs.existsSync(path.join(RENDERS_DIR, `niche-${j.id}.mp4`)))
     .map((j) => {
@@ -112,9 +114,14 @@ export async function montageSources() {
     videos: videos.map((v) => ({
       id: String(v.id),
       name: `@${v.handle} : ${v.caption.slice(0, 60) || "(sans légende)"}`,
+      handle: v.handle,
       durationS: v.duration_s,
       cover: v.cover_file ? `/covers/${v.cover_file}` : v.cover_url,
       url: `/api/videos/${v.id}/media`,
+      views: v.views ?? 0,
+      postedAt: v.posted_at,
+      favorite: !!v.favorite,
+      followed: !!v.followed,
     })),
     captures: listCaptures().map((c) => ({ id: c.id, name: c.name, durationS: c.durationS, url: c.url })),
     renders,

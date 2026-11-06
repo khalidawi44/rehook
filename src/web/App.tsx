@@ -92,6 +92,12 @@ export const App: React.FC = () => {
     setTimeout(() => setToast(null), 4000);
   }, []);
 
+  useEffect(() => {
+    const h = () => setTab("montage");
+    window.addEventListener("niche:goto-montage", h);
+    return () => window.removeEventListener("niche:goto-montage", h);
+  }, []);
+
   const loadStats = useCallback(() => api.stats().then(setStats).catch((e: Error) => setError(e.message)), []);
   const loadJobs = useCallback(() => api.jobs().then(setJobs).catch(() => {}), []);
   const lastAlertId = React.useRef<number | null>(null);

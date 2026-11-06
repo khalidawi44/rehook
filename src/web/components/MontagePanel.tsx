@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   api,
   fmtDuration,
+  fmtNum,
   type ClipEffect,
   type ClipSource,
   type Cue,
@@ -16,6 +17,7 @@ import {
 } from "../api";
 import { Field, inputCls } from "./Modal";
 import { PublishPanel } from "./PublishPanel";
+import { takePending } from "../montageQueue";
 
 type TClip = {
   uid: string;
@@ -194,6 +196,11 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
   const [sources, setSources] = useState<MontageSources | null>(null);
   const [libTab, setLibTab] = useState<"videos" | "captures" | "renders" | "music">("videos");
   const [q, setQ] = useState("");
+  const [libSort, setLibSort] = useState<"recent" | "views" | "duration" | "name">("recent");
+  const [libFollowed, setLibFollowed] = useState(false);
+  const [libFav, setLibFav] = useState(false);
+  const [libBig, setLibBig] = useState(false);
+  const [bigPreview, setBigPreview] = useState(false);
   const [clips, setClips] = useState<TClip[]>([]);
   const [sel, setSel] = useState<string | null>(null);
   const [head, setHead] = useState(0);
@@ -393,6 +400,16 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
     return () => window.removeEventListener("keydown", h);
   }, []);
 
+  const consumePending = async () => {
+    for (const p of takePending()) await add(p.source, p.name, p.url, p.durationS);
+  };
+  useEffect(() => {
+    const h = () => consumePending();
+    window.addEventListener("niche:goto-montage", h);
+    return () => window.removeEventListener("niche:goto-montage", h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const add = async (src: ClipSource, label: string, url: string, known?: number | null) => {
     const d = known && known > 0 ? known : await probeDuration(url);
     const c: TClip = { uid: uid(), source: src, name: label, url, durationS: d, inS: 0, outS: d, mute: false, volume: 1, speed: 1, effects: [] };
@@ -534,6 +551,8 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
     } catch {
       // rien à reprendre
     }
+    // Les clips « envoyés au montage » depuis un autre écran s'ajoutent après la reprise.
+    consumePending();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const saveAsProject = async () => {
@@ -747,16 +766,34 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
     return { filter: f.join(" "), transform: transform.trim(), opacity, flash, vignette: c.effects.includes("vignette"), letterbox: c.effects.includes("letterbox"), pixelate: c.effects.includes("pixelate") };
   })();
 
-  type LibItem = { id: string; name: string; durationS: number | null; cover: string | null; url: string };
+  type LibItem = { id: string; name: string; durationS: number | null; cover: string | null; url: string; views?: number; postedAt?: number | null };
   const lib: LibItem[] = !sources
     ? []
     : libTab === "videos"
-      ? sources.videos.filter((v) => !q || v.name.toLowerCase().includes(q.toLowerCase()))
+      ? sources.videos
+          .filter((v) => !q || v.name.toLowerCase().includes(q.toLowerCase()))
+          .filter((v) => !libFollowed || v.followed)
+          .filter((v) => !libFav || v.favorite)
+          .sort((a, b) =>
+            libSort === "views" ? b.views - a.views : libSort === "duration" ? (b.durationS ?? 0) - (a.durationS ?? 0) : libSort === "name" ? a.handle.localeCompare(b.handle) : (b.postedAt ?? 0) - (a.postedAt ?? 0),
+          )
       : libTab === "captures"
-        ? sources.captures.map((c) => ({ ...c, cover: null }))
+        ? sources.captures.filter((c) => !q || c.name.toLowerCase().includes(q.toLowerCase())).map((c) => ({ ...c, cover: null }))
         : libTab === "renders"
-          ? sources.renders.map((r) => ({ ...r, durationS: null, cover: null }))
+          ? sources.renders.filter((r) => !q || r.name.toLowerCase().includes(q.toLowerCase())).map((r) => ({ ...r, durationS: null, cover: null }))
           : [];
+  const removeFromLib = async (src: ClipSource, label: string) => {
+    if (!confirm(`Supprimer « ${label} » de Niche ?`)) return;
+    try {
+      if (src.kind === "video") await api.deleteVideo(Number(src.id));
+      else if (src.kind === "capture") await api.deleteCapture(src.id);
+      else await api.deleteJob(Number(src.id));
+      await loadSources();
+      notify("Supprimé");
+    } catch (e) {
+      notify((e as Error).message);
+    }
+  };
 
   const toolBtn = (k: typeof tool, label: string) => (
     <button key={k} onClick={() => setTool(k)} className={`rounded-lg px-3 py-1.5 text-xs ${tool === k ? "bg-zinc-100 text-black" : "border border-zinc-700 hover:bg-zinc-800"}`}>
@@ -799,22 +836,58 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
           </>
         ) : (
           <>
-            {libTab === "videos" ? <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtrer" className={inputCls} /> : null}
+            <div className="flex flex-wrap items-center gap-1">
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtrer" className={inputCls + " min-w-24 flex-1"} />
+              {libTab === "videos" ? (
+                <select value={libSort} onChange={(e) => setLibSort(e.target.value as typeof libSort)} className="rounded-lg border border-zinc-700 bg-zinc-900 px-2 py-2 text-xs" title="Trier">
+                  <option value="recent">Récentes</option>
+                  <option value="views">Plus vues</option>
+                  <option value="duration">Plus longues</option>
+                  <option value="name">Par compte</option>
+                </select>
+              ) : null}
+              <button onClick={() => setLibBig(!libBig)} className={`rounded-lg border px-2 py-2 text-xs ${libBig ? "border-green-500 text-green-300" : "border-zinc-700 hover:bg-zinc-800"}`} title="Grandes vignettes">🔍</button>
+            </div>
+            {libTab === "videos" ? (
+              <div className="flex gap-2 text-xs text-zinc-400">
+                <label className="flex items-center gap-1"><input type="checkbox" checked={libFollowed} onChange={(e) => setLibFollowed(e.target.checked)} className="accent-green-500" /> Comptes suivis</label>
+                <label className="flex items-center gap-1"><input type="checkbox" checked={libFav} onChange={(e) => setLibFav(e.target.checked)} className="accent-green-500" /> ⭐ Favoris</label>
+                <span className="ml-auto">{lib.length}</span>
+              </div>
+            ) : null}
             <label className="block cursor-pointer rounded-lg border border-dashed border-zinc-700 p-2 text-center text-xs text-zinc-400 hover:bg-zinc-800">
               {uploading ? "Import en cours…" : "+ Importer une vidéo (PC ou téléphone)"}
               <input type="file" accept="video/*" className="hidden" disabled={uploading} onChange={(e) => e.target.files?.[0] && uploadVideo(e.target.files[0])} />
             </label>
-            <ul className="scrollbar-thin max-h-[520px] space-y-1 overflow-y-auto text-sm">
+            <ul className={`scrollbar-thin max-h-[60vh] overflow-y-auto text-sm ${libBig ? "grid grid-cols-2 gap-2" : "space-y-1"}`}>
               {lib.map((s) => {
                 const src: ClipSource = { kind: libTab === "videos" ? "video" : libTab === "captures" ? "capture" : "render", id: s.id };
+                const thumb = s.cover ?? (src.kind !== "video" ? api.thumbsUrl(src) : null);
                 return (
-                  <li key={s.id} className="flex items-center gap-2 rounded-lg border border-zinc-800 p-1.5">
-                    {s.cover ? <img src={s.cover} alt="" className="h-12 w-8 rounded object-cover" /> : <span className="grid h-12 w-8 place-items-center rounded bg-zinc-800 text-xs">🎞</span>}
+                  <li
+                    key={s.id}
+                    draggable
+                    onDragStart={(e) => e.dataTransfer.setData("application/niche-clip", JSON.stringify({ src, name: s.name, url: s.url, durationS: s.durationS }))}
+                    onDoubleClick={() => add(src, s.name, s.url, s.durationS)}
+                    className={`cursor-grab rounded-lg border border-zinc-800 p-1.5 hover:border-zinc-600 ${libBig ? "" : "flex items-center gap-2"}`}
+                    title="Double-clic ou glisser vers la timeline"
+                  >
+                    {thumb ? (
+                      <img src={thumb} alt="" className={libBig ? "mb-1 h-40 w-full rounded object-cover" : "h-16 w-11 rounded object-cover"} loading="lazy" />
+                    ) : (
+                      <span className={`grid place-items-center rounded bg-zinc-800 text-xs ${libBig ? "mb-1 h-40 w-full" : "h-16 w-11"}`}>🎞</span>
+                    )}
                     <div className="min-w-0 flex-1">
                       <div className="truncate" title={s.name}>{s.name}</div>
-                      {s.durationS ? <div className="text-xs text-zinc-500">{fmtDuration(s.durationS)}</div> : null}
+                      <div className="text-xs text-zinc-500">
+                        {s.durationS ? fmtDuration(s.durationS) : ""}
+                        {typeof s.views === "number" && s.views > 0 ? ` · ${fmtNum(s.views)} vues` : ""}
+                      </div>
+                      <div className="mt-1 flex gap-1">
+                        <button onClick={() => add(src, s.name, s.url, s.durationS)} className="rounded-lg bg-green-500 px-2 py-0.5 text-xs font-semibold text-black hover:bg-green-400">+ Ajouter</button>
+                        <button onClick={() => removeFromLib(src, s.name)} className="rounded-lg border border-red-900 px-2 py-0.5 text-xs text-red-300 hover:bg-red-950" title="Supprimer de Niche">🗑</button>
+                      </div>
                     </div>
-                    <button onClick={() => add(src, s.name, s.url, s.durationS)} className="rounded-lg bg-green-500 px-2 py-1 text-xs font-semibold text-black hover:bg-green-400">+ Ajouter</button>
                   </li>
                 );
               })}
@@ -826,8 +899,8 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
 
       {/* Aperçu, timeline, outils */}
       <div className="min-w-0 space-y-3">
-        <div className="grid gap-3 lg:grid-cols-[auto_1fr]">
-          <div className="relative mx-auto max-w-full rounded-xl border border-zinc-800 bg-black" style={{ height: 420, maxHeight: "60vh", aspectRatio: `${out.w} / ${out.h}` }}>
+        <div className={`grid gap-3 ${bigPreview ? "" : "lg:grid-cols-[auto_1fr]"}`}>
+          <div className="relative mx-auto max-w-full rounded-xl border border-zinc-800 bg-black" style={{ height: bigPreview ? "78vh" : 420, maxHeight: bigPreview ? "78vh" : "60vh", aspectRatio: `${out.w} / ${out.h}` }} onDoubleClick={() => setBigPreview(!bigPreview)} title="Double-clic : agrandir ou réduire">
             <video
               ref={videoRef}
               playsInline
@@ -1175,6 +1248,7 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
 
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <button onClick={togglePlay} className="rounded-lg bg-zinc-100 px-3 py-1.5 font-semibold text-black hover:bg-white">{playing ? "❚❚ Pause" : "▶ Lire"}</button>
+          <button onClick={() => setBigPreview(!bigPreview)} className="rounded-lg border border-zinc-700 px-2 py-1.5 text-xs hover:bg-zinc-800" title="Agrandir l'aperçu">{bigPreview ? "⤡ Réduire" : "⤢ Agrandir"}</button>
           <span className="font-mono text-xs text-zinc-400">{fmtS(head)} / {fmtS(total)}</span>
           <span className="mx-2 h-5 w-px bg-zinc-700" />
           <button onClick={splitAtHead} className="rounded-lg border border-zinc-700 px-3 py-1.5 hover:bg-zinc-800">✂ Couper au curseur</button>
@@ -1189,13 +1263,21 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
         </div>
         <div
           ref={trackRef}
+          onDragOver={(e) => { if (e.dataTransfer.types.includes("application/niche-clip")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } }}
+          onDrop={(e) => {
+            const raw = e.dataTransfer.getData("application/niche-clip");
+            if (!raw) return;
+            e.preventDefault();
+            const d = JSON.parse(raw) as { src: ClipSource; name: string; url: string; durationS: number | null };
+            add(d.src, d.name, d.url, d.durationS);
+          }}
           className="relative h-24 w-full cursor-col-resize select-none overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 touch-none"
           onPointerDown={onTrackDown}
           onPointerMove={onTrackMove}
           onPointerUp={onTrackUp}
           onPointerCancel={onTrackUp}
         >
-          {!clips.length ? <div className="grid h-full place-items-center text-xs text-zinc-500">Ajoute des clips depuis le chutier à gauche.</div> : null}
+          {!clips.length ? <div className="grid h-full place-items-center text-xs text-zinc-500">Glisse ici des vidéos du chutier (ou double-clic dessus, ou « + Ajouter »).</div> : null}
           <div className="flex h-14">
             {clips.map((c, i) => (
               <div

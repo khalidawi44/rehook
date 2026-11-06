@@ -4,7 +4,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { FFPROBE, ffmpeg, mediaDuration } from "./media.js";
+import { spawn } from "node:child_process";
+import { FFMPEG, FFPROBE, mediaDuration } from "./media.js";
 import { PUBLIC_DIR } from "./paths.js";
 
 const execFileP = promisify(execFile);
@@ -41,21 +42,54 @@ async function dimensions(file: string): Promise<{ width: number; height: number
   }
 }
 
-export async function saveCapture(webm: Buffer, name: string): Promise<Capture> {
+export type ConvertJob = { id: string; status: "running" | "done" | "error"; progress: number; capture: Capture | null; error: string | null };
+const convertJobs = new Map<string, ConvertJob>();
+export const getConvertJob = (id: string) => convertJobs.get(id) ?? null;
+
+/** Conversion en arrière-plan avec progression (durée connue côté navigateur). */
+export function startCaptureConversion(webm: Buffer, name: string, durationHintS: number): ConvertJob {
   const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-  const src = path.join(CAPTURES_DIR, `${id}.webm`);
-  const out = path.join(CAPTURES_DIR, `${id}.mp4`);
-  fs.writeFileSync(src, webm);
-  try {
-    await ffmpeg(["-i", src, "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", out]);
-  } finally {
-    fs.rmSync(src, { force: true });
-  }
-  const durationS = (await mediaDuration(out)) ?? 0;
-  const dim = await dimensions(out);
-  const capture: Capture = { id, name: name.trim() || id, file: `${id}.mp4`, url: `/public/captures/${id}.mp4`, durationS, ...dim, createdAt: Math.floor(Date.now() / 1000) };
-  writeMeta([capture, ...readMeta()]);
-  return capture;
+  const job: ConvertJob = { id, status: "running", progress: 0, capture: null, error: null };
+  convertJobs.set(id, job);
+  (async () => {
+    const src = path.join(CAPTURES_DIR, `${id}.webm`);
+    const out = path.join(CAPTURES_DIR, `${id}.mp4`);
+    fs.writeFileSync(src, webm);
+    try {
+      const total = Math.max(1, durationHintS || (await mediaDuration(src)) || 1);
+      await new Promise<void>((resolve, reject) => {
+        const p = spawn(FFMPEG, ["-hide_banner", "-loglevel", "error", "-y", "-nostats", "-progress", "pipe:1", "-i", src, "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", out]);
+        let err = "";
+        p.stdout.on("data", (d: Buffer) => {
+          const m = String(d).match(/out_time_us=(\d+)/g);
+          if (m) job.progress = Math.min(0.99, Number(m[m.length - 1].split("=")[1]) / 1e6 / total);
+        });
+        p.stderr.on("data", (d: Buffer) => (err += d));
+        p.on("error", reject);
+        p.on("close", (code) => (code === 0 ? resolve() : reject(new Error("ffmpeg : " + err.slice(-300)))));
+      });
+      const durationS = (await mediaDuration(out)) ?? 0;
+      const dim = await dimensions(out);
+      const capture: Capture = { id, name: name.trim() || id, file: `${id}.mp4`, url: `/public/captures/${id}.mp4`, durationS, ...dim, createdAt: Math.floor(Date.now() / 1000) };
+      writeMeta([capture, ...readMeta()]);
+      job.capture = capture;
+      job.progress = 1;
+      job.status = "done";
+    } catch (e) {
+      job.status = "error";
+      job.error = (e as Error).message;
+    } finally {
+      fs.rmSync(src, { force: true });
+    }
+  })();
+  return job;
+}
+
+export async function saveCapture(webm: Buffer, name: string): Promise<Capture> {
+  const job = startCaptureConversion(webm, name, 0);
+  while (job.status === "running") await new Promise((r) => setTimeout(r, 300));
+  if (job.status === "error" || !job.capture) throw new Error(job.error ?? "Conversion échouée");
+  return job.capture;
 }
 
 export function deleteCapture(id: string): boolean {
