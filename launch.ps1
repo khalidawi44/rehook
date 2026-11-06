@@ -65,6 +65,12 @@ try {
     } else { Say "Branche git introuvable : pas de mise a jour automatique ($branch)." }
   } else { Say "git introuvable : pas de mise a jour automatique." }
 
+  # Relance par la mise a jour depuis l'outil : on attend que l'ancien serveur libere le port.
+  $restart = ($env:NICHE_RESTART -eq "1")
+  if ($restart) {
+    Say "Relance apres mise a jour depuis l'outil."
+    for ($i = 0; $i -lt 60; $i++) { if (-not (Listening)) { break }; Start-Sleep -Milliseconds 500 }
+  }
   # Deja en route et a jour : on ouvre juste le navigateur.
   $running = Listening
   if ($running -and -not $updated -and (ApiUp)) {
@@ -109,29 +115,20 @@ try {
   Say "Demarrage du serveur (arret automatique 2 min apres la fermeture du dernier onglet)."
   $env:PORT = "$port"
   $env:NICHE_AUTO_EXIT = "1"
-  $first = $true
-  $restartFlag = Join-Path $here "data\restart.flag"
-  do {
-    Remove-Item $restartFlag -Force -ErrorAction SilentlyContinue
-    $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c npx tsx src/server/index.ts" -WindowStyle Hidden -PassThru -RedirectStandardOutput $log -RedirectStandardError (Join-Path $here "data\niche.err.log")
-    $null = $proc.Handle
-    $ok = $false
-    for ($i = 0; $i -lt 120; $i++) {
-      Start-Sleep -Milliseconds 500
-      if (ApiUp) { $ok = $true; break }
-      if ($proc.HasExited) { break }
-    }
-    if ($ok) {
-      if ($first) { Say "Pret : ouverture de $url"; Start-Process $url } else { Say "Redemarre apres mise a jour." }
-    } else { Fail "Le serveur n'a pas demarre. Regarde data\niche.err.log." }
-    $first = $false
-    $proc.WaitForExit()
-    $code = $proc.ExitCode
-    # Redemarrage demande par la mise a jour depuis l'outil : fichier-temoin (ou code 75).
-    $again = (Test-Path $restartFlag) -or ($code -eq 75)
-    if ($again) { Say "Redemarrage demande par la mise a jour." }
-  } while ($again)
-  Say "Serveur arrete (code $code)."
+  $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c npx tsx src/server/index.ts" -WindowStyle Hidden -PassThru -RedirectStandardOutput $log -RedirectStandardError (Join-Path $here "data\niche.err.log")
+  $null = $proc.Handle
+  $ok = $false
+  for ($i = 0; $i -lt 120; $i++) {
+    Start-Sleep -Milliseconds 500
+    if (ApiUp) { $ok = $true; break }
+    if ($proc.HasExited) { break }
+  }
+  if (-not $ok) { Fail "Le serveur n'a pas demarre. Regarde data\niche.err.log." }
+  # Apres une mise a jour depuis l'outil, l'onglet deja ouvert se recharge tout seul : pas de nouvel onglet.
+  if ($restart) { Say "Pret apres mise a jour (onglet existant)." } else { Say "Pret : ouverture de $url"; Start-Process $url }
+  # Mise a jour depuis l'outil : le serveur relance ce lanceur lui-meme (NICHE_RESTART=1) puis s'arrete.
+  $proc.WaitForExit()
+  Say "Serveur arrete (code $($proc.ExitCode))."
 } catch {
   Fail $_.Exception.Message
 }

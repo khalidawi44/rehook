@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { exec } from "node:child_process";
+import { exec, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { ROOT } from "./paths.js";
 
@@ -75,9 +75,20 @@ export async function applyUpdate(): Promise<void> {
     log("redémarrage");
     updateState.phase = "restarting";
     updateState.available = false;
-    // Fichier-témoin lu par le lanceur : relancer le serveur après l'arrêt.
-    fs.writeFileSync(path.join(ROOT, "data", "restart.flag"), new Date().toISOString());
-    setTimeout(() => process.exit(75), 800);
+    if (process.platform === "win32" && fs.existsSync(path.join(ROOT, "launch.ps1"))) {
+      // Windows : le serveur relance lui-même le lanceur (fichier à jour sur le disque), détaché,
+      // puis s'arrête. Ne dépend pas du code de sortie, que PowerShell ne récupère pas toujours.
+      const child = spawn(
+        "cmd.exe",
+        ["/c", "start", "", "/min", "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", path.join(ROOT, "launch.ps1")],
+        { cwd: ROOT, detached: true, stdio: "ignore", windowsHide: true, env: { ...process.env, NICHE_RESTART: "1" } },
+      );
+      child.unref();
+      setTimeout(() => process.exit(0), 800);
+    } else {
+      // Docker (restart: unless-stopped) ou lancement manuel : code 75 = à relancer.
+      setTimeout(() => process.exit(75), 800);
+    }
   } catch (e) {
     updateState.phase = "error";
     updateState.error = (e as Error).message.slice(0, 500);
