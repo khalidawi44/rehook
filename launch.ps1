@@ -13,6 +13,12 @@ $launcherLog = Join-Path $here "data\lanceur.log"
 "==== $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') lancement" | Out-File -Append -Encoding utf8 $launcherLog
 
 function Say($m) { ("[{0}] {1}" -f (Get-Date -Format 'HH:mm:ss'), $m) | Out-File -Append -Encoding utf8 $launcherLog }
+# git ecrit sa progression sur stderr : on passe par cmd pour que PowerShell ne le prenne pas pour une erreur.
+function Git([string]$arguments) {
+  $out = cmd /c "git $arguments 2>&1"
+  $script:gitExit = $LASTEXITCODE
+  return ($out | Out-String).Trim()
+}
 function Fail($m) {
   Say ("ERREUR : " + $m)
   Add-Type -AssemblyName System.Windows.Forms
@@ -35,19 +41,21 @@ try {
   # Mise a jour depuis GitHub
   $updated = $false
   if (Get-Command git -ErrorAction SilentlyContinue) {
-    try {
-      $branch = (git rev-parse --abbrev-ref HEAD 2>$null).Trim()
-      if ($branch -and $branch -ne "HEAD") {
-        git fetch origin $branch 2>&1 | Out-Null
-        $local = (git rev-parse HEAD).Trim()
-        $remote = (git rev-parse "origin/$branch").Trim()
+    $branch = Git "rev-parse --abbrev-ref HEAD"
+    if ($gitExit -eq 0 -and $branch -and $branch -ne "HEAD") {
+      $fetch = Git "fetch origin $branch"
+      if ($gitExit -ne 0) { Say "Mise a jour impossible (hors ligne ?) : $fetch" }
+      else {
+        $local = Git "rev-parse HEAD"
+        $remote = Git "rev-parse origin/$branch"
         if ($local -ne $remote) {
           Say "Mise a jour : $local -> $remote"
-          git reset --hard "origin/$branch" 2>&1 | Out-File -Append -Encoding utf8 $launcherLog
-          $updated = $true
-        } else { Say "A jour ($branch)." }
+          $reset = Git "reset --hard origin/$branch"
+          Say $reset
+          if ($gitExit -eq 0) { $updated = $true } else { Say "Echec de la mise a jour, on garde la version actuelle." }
+        } else { Say "A jour ($branch, $($local.Substring(0,7)))." }
       }
-    } catch { Say "Mise a jour impossible (hors ligne ?) : $($_.Exception.Message)" }
+    } else { Say "Branche git introuvable : pas de mise a jour automatique ($branch)." }
   } else { Say "git introuvable : pas de mise a jour automatique." }
 
   # Deja en route et a jour : on ouvre juste le navigateur.
