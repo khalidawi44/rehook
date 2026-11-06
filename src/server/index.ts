@@ -12,7 +12,7 @@ import { listAlerts, markSeen, unseenCount } from "./alerts.js";
 import { listPacks, loadPack } from "./packs/index.js";
 import { deleteCapture, listCaptures, saveCapture } from "./captures.js";
 import { ensureSourceFile } from "./recreate/analyze.js";
-import { deleteMusic, getMontage, listMontages, listMusic, montageSources, saveMusic, startMontage, transcribeMontage, type MontageRequest } from "./montage.js";
+import { CLIP_EFFECTS, deleteMusic, getMontage, listMontages, listMusic, montageSources, saveMusic, startMontage, transcribeMontage, type ClipEffect, type MontageRequest } from "./montage.js";
 import { ensureSourceFile as ensureSource } from "./recreate/analyze.js";
 import { FFMPEG } from "./media.js";
 import { execFile as execFileCb } from "node:child_process";
@@ -25,8 +25,13 @@ import { createJob, deleteJob, getJob, listJobs, retryJob } from "./recreate/ind
 import { imageProvider } from "./recreate/images.js";
 import { voiceProvider } from "./recreate/voice.js";
 import { COVERS_DIR, PUBLIC_DIR, RENDERS_DIR, ROOT } from "./paths.js";
+import { authEnabled, installAuth } from "./auth.js";
+import { generateTexts, getPublication, listPublications, postizChannels, postizEnabled, postizPublish, resolvePublishSource, savePublication, TextsSchema, type Publication, type PublishSource } from "./publish.js";
 
 const app = express();
+if (process.env.NICHE_BEHIND_PROXY === "1") app.set("trust proxy", 1);
+app.use(express.urlencoded({ extended: false, limit: "64kb" }));
+installAuth(app);
 app.use(express.json({ limit: "1mb" }));
 
 const asyncRoute =
@@ -65,6 +70,8 @@ app.get("/api/stats", (req, res) => {
       voice: voiceProvider(),
       anthropic: !!process.env.ANTHROPIC_API_KEY,
       telegram: !!(process.env.NICHE_TELEGRAM_BOT_TOKEN && process.env.NICHE_TELEGRAM_CHAT_ID),
+      auth: authEnabled(),
+      postiz: !!process.env.POSTIZ_API_KEY,
     },
   });
 });
@@ -314,7 +321,7 @@ const ClipSchema = z.object({
   mute: z.boolean().optional(),
   volume: z.number().min(0).max(4).optional(),
   speed: z.number().min(0.25).max(4).optional(),
-  effects: z.array(z.enum(["zoom-in", "zoom-out", "bw", "warm", "cold", "vignette", "mirror", "sharpen", "punch", "fade-in", "fade-out", "blur-bg"])).optional(),
+  effects: z.array(z.enum(CLIP_EFFECTS as [ClipEffect, ...ClipEffect[]])).optional(),
 });
 const WordSchema = z.object({ text: z.string(), start: z.number(), end: z.number() });
 const CueSchema = z.object({ id: z.string(), start: z.number(), end: z.number(), text: z.string().max(500), words: z.array(WordSchema) });
@@ -423,6 +430,79 @@ app.post(
     } finally {
       fs.rmSync(tmp, { force: true });
     }
+  }),
+);
+
+// ---- Publication -------------------------------------------------------------
+
+const SourceSchema = z.object({ kind: z.enum(["montage", "render", "capture"]), id: z.string() });
+const pubKey = (s: PublishSource) => `${s.kind}-${s.id}`;
+function ensurePublication(src: PublishSource): Publication {
+  const existing = getPublication(pubKey(src));
+  const r = resolvePublishSource(src);
+  const t = now();
+  const p: Publication = existing ?? { key: pubKey(src), source: src, file: r.file, url: r.url, createdAt: t, updatedAt: t, language: "fr", hint: "", context: r.context, texts: null, sent: [] };
+  p.file = r.file;
+  p.url = r.url;
+  if (!existing) savePublication(p);
+  return p;
+}
+app.get("/api/publish", (_req, res) => res.json(listPublications()));
+app.post("/api/publish/get", (req, res) => {
+  const parsed = SourceSchema.safeParse(req.body?.source);
+  if (!parsed.success) return res.status(400).json({ error: "Source invalide" });
+  try {
+    res.json(ensurePublication(parsed.data));
+  } catch (e) {
+    res.status(404).json({ error: (e as Error).message });
+  }
+});
+app.post(
+  "/api/publish/texts",
+  asyncRoute(async (req, res) => {
+    const parsed = SourceSchema.safeParse(req.body?.source);
+    if (!parsed.success) return void res.status(400).json({ error: "Source invalide" });
+    if (!process.env.ANTHROPIC_API_KEY) return void res.status(400).json({ error: "ANTHROPIC_API_KEY manquante : impossible de rédiger les textes" });
+    const p = ensurePublication(parsed.data);
+    p.hint = String(req.body?.hint ?? "").slice(0, 500);
+    p.language = String(req.body?.language ?? "fr").slice(0, 5);
+    p.texts = await generateTexts(p, String(req.body?.extra ?? "").slice(0, 1000), (l) => console.log("[niche]", l));
+    p.updatedAt = now();
+    savePublication(p);
+    res.json(p);
+  }),
+);
+app.put("/api/publish/:key", (req, res) => {
+  const p = getPublication(String(req.params.key));
+  if (!p) return res.status(404).json({ error: "Publication introuvable" });
+  const parsed = TextsSchema.safeParse(req.body?.texts);
+  if (!parsed.success) return res.status(400).json({ error: "Textes invalides" });
+  p.texts = parsed.data;
+  p.updatedAt = now();
+  savePublication(p);
+  res.json(p);
+});
+app.get(
+  "/api/publish/channels",
+  asyncRoute(async (_req, res) => {
+    try {
+      res.json({ enabled: postizEnabled(), channels: await postizChannels() });
+    } catch (e) {
+      res.json({ enabled: postizEnabled(), channels: [], error: (e as Error).message });
+    }
+  }),
+);
+app.post(
+  "/api/publish/:key/send",
+  asyncRoute(async (req, res) => {
+    const p = getPublication(String(req.params.key));
+    if (!p) return void res.status(404).json({ error: "Publication introuvable" });
+    if (!postizEnabled()) return void res.status(400).json({ error: "POSTIZ_API_KEY manquante dans .env" });
+    const ids = z.array(z.string()).parse(req.body?.channels ?? []);
+    const all = await postizChannels();
+    const chosen = all.filter((c) => ids.includes(c.id));
+    if (!chosen.length) return void res.status(400).json({ error: "Aucun réseau choisi" });
+    res.json(await postizPublish(p, chosen, typeof req.body?.when === "string" ? req.body.when : null, (l) => console.log("[niche]", l)));
   }),
 );
 

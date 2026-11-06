@@ -59,7 +59,7 @@ export type Stats = {
     log: string[];
     watch: { running: boolean; lastAt: number | null; nextAt: number | null; lastCount: number; lastAlerts: number };
   };
-  providers: { discovery: string; images: string; voice: string; anthropic: boolean; telegram: boolean };
+  providers: { discovery: string; images: string; voice: string; anthropic: boolean; telegram: boolean; auth: boolean; postiz: boolean };
 };
 
 export type Alert = {
@@ -77,7 +77,9 @@ export type Alert = {
 export type Capture = { id: string; name: string; file: string; url: string; durationS: number; width: number; height: number; createdAt: number };
 
 export type ClipSource = { kind: "video" | "capture" | "render"; id: string };
-export type ClipEffect = "zoom-in" | "zoom-out" | "bw" | "warm" | "cold" | "vignette" | "mirror" | "sharpen" | "punch" | "fade-in" | "fade-out" | "blur-bg";
+export type ClipEffect =
+  | "zoom-in" | "zoom-out" | "bw" | "warm" | "cold" | "vignette" | "mirror" | "sharpen" | "punch" | "fade-in" | "fade-out" | "blur-bg"
+  | "sepia" | "vintage" | "cinematic" | "glow" | "blur" | "pixelate" | "invert" | "shake" | "letterbox" | "flash" | "dream" | "contrast-hard";
 export type Clip = { source: ClipSource; inS: number; outS: number; mute?: boolean; volume?: number; speed?: number; effects?: ClipEffect[] };
 export type Word = { text: string; start: number; end: number };
 export type Cue = { id: string; start: number; end: number; text: string; words: Word[] };
@@ -115,6 +117,31 @@ export type MontageSources = {
   renders: { id: string; name: string; url: string }[];
 };
 export type MontageJob = { id: string; name: string; status: "running" | "done" | "error"; progress: number; url: string | null; error: string | null; createdAt: number; durationS: number };
+
+export type PublishSource = { kind: "montage" | "render" | "capture"; id: string };
+export type Texts = {
+  tiktok: { caption: string; hashtags: string[] };
+  instagram: { caption: string; hashtags: string[] };
+  youtube: { title: string; description: string; tags: string[] };
+  x: { text: string };
+  facebook: { text: string };
+  threads: { text: string };
+  snapchat: { caption: string };
+};
+export type Publication = {
+  key: string;
+  source: PublishSource;
+  file: string;
+  url: string;
+  createdAt: number;
+  updatedAt: number;
+  language: string;
+  hint: string;
+  context: string;
+  texts: Texts | null;
+  sent: { at: number; channel: string; provider: string; status: "ok" | "error"; detail: string }[];
+};
+export type Channel = { id: string; name: string; identifier: string; picture?: string; disabled?: boolean };
 
 export type Pack = { name: string; title: string; description: string; accounts: number; hashtags: string[]; videos: number };
 
@@ -201,6 +228,10 @@ export type JobOptions = {
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
   const r = await fetch(url, { headers: { "Content-Type": "application/json" }, ...init });
   const body = await r.json().catch(() => ({}));
+  if (r.status === 401) {
+    location.href = "/login";
+    throw new Error("Connexion requise");
+  }
   if (!r.ok) throw new Error((body as { error?: string }).error ?? `Erreur ${r.status}`);
   return body as T;
 }
@@ -247,6 +278,11 @@ export const api = {
     return body as Capture;
   },
   deleteCapture: (id: string) => req<{ ok: boolean }>(`/api/captures/${id}`, { method: "DELETE" }),
+  publication: (source: PublishSource) => req<Publication>("/api/publish/get", { method: "POST", body: JSON.stringify({ source }) }),
+  publishTexts: (source: PublishSource, o: { hint: string; extra: string; language: string }) => req<Publication>("/api/publish/texts", { method: "POST", body: JSON.stringify({ source, ...o }) }),
+  savePublication: (key: string, texts: Texts) => req<Publication>(`/api/publish/${key}`, { method: "PUT", body: JSON.stringify({ texts }) }),
+  publishChannels: () => req<{ enabled: boolean; channels: Channel[]; error?: string }>("/api/publish/channels"),
+  publishSend: (key: string, channels: string[], when: string | null) => req<Publication["sent"]>(`/api/publish/${key}/send`, { method: "POST", body: JSON.stringify({ channels, when }) }),
   montageSources: () => req<MontageSources>("/api/montage/sources"),
   montages: () => req<MontageJob[]>("/api/montage"),
   montage: (id: string) => req<MontageJob>(`/api/montage/${id}`),

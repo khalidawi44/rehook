@@ -77,6 +77,18 @@ Depuis la fiche d'une recréation : copier la légende et les hashtags, refaire 
 
 Pour retoucher le rendu à l'œil : `npm run remotion:studio`.
 
+## Sur un serveur cloud (accès de partout)
+
+Voir `deploy/README.md` : une commande installe Niche sur un VPS Ubuntu (Docker, Caddy avec HTTPS automatique, mot de passe `NICHE_PASSWORD`, mise à jour horaire depuis GitHub). La veille tourne alors 24 h/24, les alertes arrivent sur le téléphone, et l'appli s'installe sur l'écran d'accueil depuis n'importe où.
+
+## Publier en un clic
+
+Depuis une recréation terminée ou un export de montage, « 📣 Publier partout » ouvre la fenêtre de publication : Claude rédige description, accroche et hashtags adaptés à chaque réseau (TikTok, Instagram Reels, YouTube Shorts, Snapchat Spotlight, X, Facebook Reels, Threads), tout est modifiable et enregistré. Trois façons de publier :
+
+- **En un clic** : avec un compte Postiz (postiz.com ou auto-hébergé) et `POSTIZ_API_KEY` dans `.env`, les réseaux connectés dans Postiz apparaissent avec une case à cocher ; « Publier maintenant » envoie la vidéo et le bon texte à chacun (TikTok en publication directe, YouTube avec titre et mots-clés, Instagram en Reel…), ou à l'heure choisie.
+- **Depuis le téléphone** : « 📲 Partager » ouvre la feuille de partage avec la vidéo, le texte est copié dans le presse-papiers ; c'est la voie pour Snapchat, qui n'a pas d'API de publication.
+- **À la main** : liens directs vers la page d'envoi de chaque réseau, le texte correspondant est copié au clic.
+
 ## Sur le téléphone (iPhone et Android)
 
 Niche est une PWA : même interface, même style. Réglages → « Sur le téléphone » affiche un QR code avec l'adresse du PC sur le Wi-Fi ; on le scanne, puis « Ajouter à l'écran d'accueil » (Partager sur iPhone, menu ⋮ sur Android) installe Niche en plein écran avec son icône. Le PC doit rester allumé avec Niche lancé ; si la page ne s'ouvre pas, autoriser Node.js dans le pare-feu Windows (réseau privé). Tout fonctionne depuis le téléphone (veille, alertes, lecteur, recréation, montage) sauf l'enregistreur d'écran du navigateur, remplacé par celui du système puis un import. Pour un accès hors de la maison : déployer le serveur sur un VPS ou passer par un tunnel (Tailscale).

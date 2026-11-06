@@ -1,0 +1,36 @@
+# Niche sur un serveur : `docker compose up -d --build` depuis le dossier niche/deploy.
+# Caddy obtient le certificat HTTPS tout seul pour NICHE_DOMAIN (Let's Encrypt).
+services:
+  niche:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      PORT: "3001"
+      NICHE_BEHIND_PROXY: "1"
+    volumes:
+      - ../data:/app/data
+    expose:
+      - "3001"
+    shm_size: "1gb"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      NICHE_DOMAIN: ${NICHE_DOMAIN:-:80}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - niche
+
+volumes:
+  caddy_data:
+  caddy_config:

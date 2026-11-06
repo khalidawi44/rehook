@@ -9,10 +9,12 @@ import {
   type MontageRequest,
   type MontageSources,
   type MusicTrack,
+  type PublishSource,
   type SubtitleStyle,
   type TextItem,
 } from "../api";
 import { Field, inputCls } from "./Modal";
+import { PublishPanel } from "./PublishPanel";
 
 type TClip = {
   uid: string;
@@ -35,19 +37,46 @@ const PRESETS = [
   { label: "720x1280", w: 720, h: 1280 },
 ];
 
-const EFFECTS: { key: ClipEffect; label: string }[] = [
-  { key: "zoom-in", label: "Zoom avant" },
-  { key: "zoom-out", label: "Zoom arrière" },
-  { key: "punch", label: "Punchy (contraste)" },
-  { key: "bw", label: "Noir et blanc" },
-  { key: "warm", label: "Chaud" },
-  { key: "cold", label: "Froid" },
-  { key: "vignette", label: "Vignette" },
-  { key: "sharpen", label: "Netteté" },
-  { key: "mirror", label: "Miroir" },
-  { key: "blur-bg", label: "Fond flou (vidéo horizontale)" },
-  { key: "fade-in", label: "Fondu entrée" },
-  { key: "fade-out", label: "Fondu sortie" },
+const EFFECT_GROUPS: { title: string; items: { key: ClipEffect; label: string }[] }[] = [
+  {
+    title: "Filtres",
+    items: [
+      { key: "punch", label: "Punchy" },
+      { key: "cinematic", label: "Cinéma" },
+      { key: "vintage", label: "Vintage" },
+      { key: "sepia", label: "Sépia" },
+      { key: "bw", label: "Noir et blanc" },
+      { key: "warm", label: "Chaud" },
+      { key: "cold", label: "Froid" },
+      { key: "dream", label: "Rêve" },
+      { key: "glow", label: "Halo" },
+      { key: "contrast-hard", label: "Contraste dur" },
+      { key: "invert", label: "Négatif" },
+      { key: "vignette", label: "Vignette" },
+      { key: "sharpen", label: "Netteté" },
+      { key: "blur", label: "Flou" },
+      { key: "pixelate", label: "Pixels" },
+    ],
+  },
+  {
+    title: "Mouvement et cadre",
+    items: [
+      { key: "zoom-in", label: "Zoom avant" },
+      { key: "zoom-out", label: "Zoom arrière" },
+      { key: "shake", label: "Tremblement" },
+      { key: "mirror", label: "Miroir" },
+      { key: "letterbox", label: "Bandes cinéma" },
+      { key: "blur-bg", label: "Fond flou (vidéo horizontale)" },
+    ],
+  },
+  {
+    title: "Entrée et sortie",
+    items: [
+      { key: "fade-in", label: "Fondu entrée" },
+      { key: "flash", label: "Flash blanc" },
+      { key: "fade-out", label: "Fondu sortie" },
+    ],
+  },
 ];
 
 const TRANSITIONS = [
@@ -108,6 +137,7 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
   const [texts, setTexts] = useState<TextItem[]>([]);
   const [exports, setExports] = useState<MontageJob[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [publish, setPublish] = useState<{ source: PublishSource; title: string } | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const musicRef = useRef<HTMLAudioElement>(null);
   const clipsRef = useRef(clips);
@@ -383,6 +413,7 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
 
   return (
     <div className="my-4 grid gap-4 xl:grid-cols-[300px_1fr]">
+      {publish ? <PublishPanel source={publish.source} title={publish.title} onClose={() => setPublish(null)} notify={notify} /> : null}
       {/* Chutier */}
       <div className="min-w-0 space-y-2 rounded-xl border border-zinc-800 p-3">
         <div className="flex flex-wrap gap-1 text-xs">
@@ -512,15 +543,19 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
                       <button onClick={duplicate} className="rounded-lg border border-zinc-700 px-2 py-1 text-xs hover:bg-zinc-800">Dupliquer</button>
                       <button onClick={remove} className="rounded-lg border border-red-900 px-2 py-1 text-xs text-red-300 hover:bg-red-950">Supprimer</button>
                     </div>
-                    <div>
-                      <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500">Effets du clip (visibles à l'export)</div>
-                      <div className="flex flex-wrap gap-1">
-                        {EFFECTS.map((e) => (
-                          <button key={e.key} onClick={() => toggleEffect(e.key)} className={`rounded-lg border px-2 py-1 text-xs ${selected.effects.includes(e.key) ? "border-green-500 bg-green-500/10 text-green-300" : "border-zinc-700 hover:bg-zinc-800"}`}>
-                            {e.label}
-                          </button>
-                        ))}
-                      </div>
+                    <div className="space-y-2">
+                      {EFFECT_GROUPS.map((g) => (
+                        <div key={g.title}>
+                          <div className="mb-1 text-xs uppercase tracking-wide text-zinc-500">{g.title} (visibles à l'export)</div>
+                          <div className="flex flex-wrap gap-1">
+                            {g.items.map((e) => (
+                              <button key={e.key} onClick={() => toggleEffect(e.key)} className={`rounded-lg border px-2 py-1 text-xs ${selected.effects.includes(e.key) ? "border-green-500 bg-green-500/10 text-green-300" : "border-zinc-700 hover:bg-zinc-800"}`}>
+                                {e.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                     <div className="text-xs text-zinc-500">Dans le montage : de {fmtS(selStart)} à {fmtS(selStart + clipLen(selected))}.</div>
                   </div>
@@ -689,7 +724,10 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
                         {e.url ? (
                           <div className="mt-2 flex gap-2">
                             <video src={e.url} controls className="h-36 rounded bg-black" />
-                            <a href={e.url} download className="self-end rounded-lg bg-green-500 px-3 py-1.5 text-xs font-semibold text-black hover:bg-green-400">Télécharger</a>
+                            <div className="flex flex-col justify-end gap-1">
+                              <button onClick={() => setPublish({ source: { kind: "montage", id: e.id }, title: e.name })} className="rounded-lg bg-green-500 px-3 py-1.5 text-xs font-semibold text-black hover:bg-green-400">📣 Publier partout</button>
+                              <a href={e.url} download className="rounded-lg border border-zinc-700 px-3 py-1.5 text-center text-xs hover:bg-zinc-800">Télécharger</a>
+                            </div>
                           </div>
                         ) : null}
                       </li>

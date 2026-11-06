@@ -16,7 +16,10 @@ import { buildAss, DEFAULT_STYLE, transcribeAudio, wordsToCues, type Cue, type S
 const execFileP = promisify(execFile);
 
 export type ClipSource = { kind: "video" | "capture" | "render"; id: string };
-export type ClipEffect = "zoom-in" | "zoom-out" | "bw" | "warm" | "cold" | "vignette" | "mirror" | "sharpen" | "punch" | "fade-in" | "fade-out" | "blur-bg";
+export type ClipEffect =
+  | "zoom-in" | "zoom-out" | "bw" | "warm" | "cold" | "vignette" | "mirror" | "sharpen" | "punch" | "fade-in" | "fade-out" | "blur-bg"
+  | "sepia" | "vintage" | "cinematic" | "glow" | "blur" | "pixelate" | "invert" | "shake" | "letterbox" | "flash" | "dream" | "contrast-hard";
+export const CLIP_EFFECTS: ClipEffect[] = ["zoom-in", "zoom-out", "bw", "warm", "cold", "vignette", "mirror", "sharpen", "punch", "fade-in", "fade-out", "blur-bg", "sepia", "vintage", "cinematic", "glow", "blur", "pixelate", "invert", "shake", "letterbox", "flash", "dream", "contrast-hard"];
 export type Clip = { source: ClipSource; inS: number; outS: number; mute?: boolean; volume?: number; speed?: number; effects?: ClipEffect[] };
 export type MusicOptions = { file: string; volume?: number; startS?: number; fadeInS?: number; fadeOutS?: number; duck?: boolean };
 export type MontageRequest = {
@@ -152,9 +155,21 @@ export function deleteMusic(file: string): boolean {
 
 const clipLen = (c: Clip) => Math.max(0.05, (c.outS - c.inS) / Math.min(4, Math.max(0.25, c.speed ?? 1)));
 
-function effectFilters(effects: ClipEffect[], W: number, H: number, fps: number, len: number): string[] {
+function effectFilters(effects: ClipEffect[], W: number, H: number, fps: number, len: number, i = 0): string[] {
   const f: string[] = [];
   for (const e of effects) {
+    if (e === "sepia") f.push("colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131:0");
+    if (e === "vintage") f.push("curves=vintage,vignette=PI/5,noise=alls=10:allf=t");
+    if (e === "cinematic") f.push("colorbalance=rs=.12:bs=-.1:rh=-.08:bh=.12,eq=contrast=1.1:saturation=1.05");
+    if (e === "glow") f.push(`split[gl${i}a][gl${i}b];[gl${i}b]gblur=sigma=14[gl${i}c];[gl${i}a][gl${i}c]blend=all_mode=screen:all_opacity=0.4`);
+    if (e === "dream") f.push(`split[dr${i}a][dr${i}b];[dr${i}b]gblur=sigma=8[dr${i}c];[dr${i}a][dr${i}c]blend=all_mode=lighten:all_opacity=0.5,eq=saturation=1.15`);
+    if (e === "blur") f.push("gblur=sigma=6");
+    if (e === "pixelate") f.push(`scale=iw/14:ih/14:flags=neighbor,scale=${W}:${H}:flags=neighbor`);
+    if (e === "invert") f.push("negate");
+    if (e === "shake") f.push(`crop=iw*0.94:ih*0.94:x='(iw-ow)/2+(random(1)-0.5)*ih*0.03':y='(ih-oh)/2+(random(2)-0.5)*ih*0.03',scale=${W}:${H}`);
+    if (e === "letterbox") f.push("drawbox=y=0:h=ih*0.1:w=iw:color=black:t=fill,drawbox=y=ih*0.9:h=ih*0.1:w=iw:color=black:t=fill");
+    if (e === "flash") f.push("fade=t=in:st=0:d=0.25:color=white");
+    if (e === "contrast-hard") f.push("eq=contrast=1.4:brightness=-0.03:saturation=0.9");
     if (e === "zoom-in") f.push(`zoompan=z='min(zoom+0.0012,1.25)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${W}x${H}:fps=${fps}`);
     if (e === "zoom-out") f.push(`zoompan=z='if(eq(on,1),1.25,max(zoom-0.0012,1.0))':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${W}x${H}:fps=${fps}`);
     if (e === "bw") f.push("hue=s=0");
@@ -197,7 +212,7 @@ async function buildGraph(req: MontageRequest, files: string[], audios: boolean[
       } else {
         scale = `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H}`;
       }
-      const chain = [`trim=start=${c.inS}:end=${c.outS}`, `setpts=(PTS-STARTPTS)/${speed}`, scale, `fps=${fps}`, ...effectFilters(effects, W, H, fps, len), "format=yuv420p", "setsar=1"];
+      const chain = [`trim=start=${c.inS}:end=${c.outS}`, `setpts=(PTS-STARTPTS)/${speed}`, scale, `fps=${fps}`, ...effectFilters(effects, W, H, fps, len, i), "format=yuv420p", "setsar=1"];
       filters.push(`[${i}:v]${chain.join(",")}[v${i}]`);
     }
     if (audios[i] && !c.mute) {

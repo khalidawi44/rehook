@@ -1,0 +1,12 @@
+{$NICHE_DOMAIN} {
+	encode zstd gzip
+	request_body {
+		max_size 2GB
+	}
+	reverse_proxy niche:3001 {
+		transport http {
+			read_timeout 30m
+			write_timeout 30m
+		}
+	}
+}

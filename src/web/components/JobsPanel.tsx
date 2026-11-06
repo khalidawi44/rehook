@@ -1,10 +1,12 @@
 import React, { useState } from "react";
-import { api, timeAgo, type Brief, type Job } from "../api";
+import { api, timeAgo, type Brief, type Job, type PublishSource } from "../api";
+import { PublishPanel } from "./PublishPanel";
 
 const STEPS = ["Analyse de la vidéo source", "Script", "Images", "Voix off", "Rendu vidéo", "Terminé"];
 
 export const JobsPanel: React.FC<{ jobs: Job[]; reload: () => void; notify: (m: string) => void }> = ({ jobs, reload, notify }) => {
   const [open, setOpen] = useState<number | null>(null);
+  const [publish, setPublish] = useState<{ source: PublishSource; title: string } | null>(null);
   if (!jobs.length) {
     return (
       <div className="my-10 rounded-xl border border-dashed border-zinc-700 p-10 text-center text-zinc-400">
@@ -15,13 +17,14 @@ export const JobsPanel: React.FC<{ jobs: Job[]; reload: () => void; notify: (m: 
   return (
     <div className="my-4 space-y-3">
       {jobs.map((j) => (
-        <JobRow key={j.id} job={j} open={open === j.id} toggle={() => setOpen(open === j.id ? null : j.id)} reload={reload} notify={notify} />
+        <JobRow key={j.id} job={j} open={open === j.id} toggle={() => setOpen(open === j.id ? null : j.id)} reload={reload} notify={notify} onPublish={(title) => setPublish({ source: { kind: "render", id: String(j.id) }, title })} />
       ))}
+      {publish ? <PublishPanel source={publish.source} title={publish.title} onClose={() => setPublish(null)} notify={notify} /> : null}
     </div>
   );
 };
 
-const JobRow: React.FC<{ job: Job; open: boolean; toggle: () => void; reload: () => void; notify: (m: string) => void }> = ({ job, open, toggle, reload, notify }) => {
+const JobRow: React.FC<{ job: Job; open: boolean; toggle: () => void; reload: () => void; notify: (m: string) => void; onPublish: (title: string) => void }> = ({ job, open, toggle, reload, notify, onPublish }) => {
   const brief = job.brief ? (JSON.parse(job.brief) as Brief) : null;
   const pct = Math.round(job.progress * 100);
   const color = job.status === "done" ? "bg-green-500" : job.status === "error" ? "bg-red-500" : "bg-amber-400";
@@ -69,7 +72,10 @@ const JobRow: React.FC<{ job: Job; open: boolean; toggle: () => void; reload: ()
             {job.output_file ? (
               <>
                 <video src={`/renders/${job.output_file}`} controls className="w-full rounded-xl bg-black" />
-                <a href={`/renders/${job.output_file}`} download className="mt-2 block rounded-lg bg-green-500 px-3 py-2 text-center text-sm font-semibold text-black hover:bg-green-400">
+                <button onClick={() => onPublish(brief?.title ?? job.video.caption)} className="mt-2 block w-full rounded-lg bg-green-500 px-3 py-2 text-center text-sm font-semibold text-black hover:bg-green-400">
+                  📣 Publier partout
+                </button>
+                <a href={`/renders/${job.output_file}`} download className="mt-2 block rounded-lg border border-zinc-700 px-3 py-2 text-center text-sm hover:bg-zinc-800">
                   Télécharger le MP4
                 </a>
               </>
