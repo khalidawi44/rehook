@@ -26,6 +26,7 @@ import { deleteProject, getProject, listProjects, saveProject } from "./projects
 import { speechSegments, thumbStrip, waveImage } from "./tools/media-analysis.js";
 import { translateCues } from "./translate.js";
 import { trends } from "./trends.js";
+import { generateIdeas, lastIdeas } from "./ideas.js";
 import { listReminders } from "./reminders.js";
 import { postizAnalytics } from "./publish.js";
 import { imageProvider } from "./recreate/images.js";
@@ -197,6 +198,20 @@ app.patch("/api/accounts/:id", (req, res) => {
 app.delete("/api/accounts/:id", (req, res) => {
   db.prepare("DELETE FROM accounts WHERE id = ?").run(Number(req.params.id));
   res.json({ ok: true });
+});
+
+// Actions de masse : supprimer la sélection, ne garder que la sélection, ou se désabonner de la sélection.
+app.post("/api/accounts/bulk", (req, res) => {
+  const action = String(req.body?.action ?? "");
+  const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).map(Number).filter((n: number) => Number.isInteger(n) && n > 0) as number[];
+  if (!["delete", "keep", "unfollow"].includes(action)) return void res.status(400).json({ error: "Action inconnue" });
+  if (!ids.length) return void res.status(400).json({ error: "Aucun compte sélectionné" });
+  const marks = ids.map(() => "?").join(",");
+  let changes = 0;
+  if (action === "delete") changes = Number(db.prepare(`DELETE FROM accounts WHERE id IN (${marks})`).run(...ids).changes);
+  else if (action === "keep") changes = Number(db.prepare(`DELETE FROM accounts WHERE id NOT IN (${marks})`).run(...ids).changes);
+  else changes = Number(db.prepare(`UPDATE accounts SET followed = 0, updated_at = ? WHERE id IN (${marks})`).run(now(), ...ids).changes);
+  res.json({ ok: true, changes });
 });
 
 // ---- Réglages ----------------------------------------------------------------
@@ -495,6 +510,23 @@ app.delete("/api/projects/:id", (req, res) => res.json({ ok: deleteProject(Strin
 // ---- Tendances et planning ---------------------------------------------------
 
 app.get("/api/trends", (req, res) => res.json(trends(Number(req.query.days ?? 7))));
+
+// ---- Idées de vidéos à tourner -----------------------------------------------
+let ideasRunning = false;
+app.get("/api/ideas", (_req, res) => res.json({ running: ideasRunning, result: lastIdeas() }));
+app.post(
+  "/api/ideas",
+  asyncRoute(async (req, res) => {
+    if (ideasRunning) return void res.status(409).json({ error: "Des idées sont déjà en cours de génération" });
+    ideasRunning = true;
+    try {
+      const r = await generateIdeas({ days: Number(req.body?.days ?? 7), count: Number(req.body?.count ?? 8), theme: String(req.body?.theme ?? "") }, log);
+      res.json(r);
+    } finally {
+      ideasRunning = false;
+    }
+  }),
+);
 app.get("/api/reminders", (_req, res) => res.json(listReminders()));
 app.get(
   "/api/publish/:key/analytics",
@@ -647,23 +679,53 @@ if (fs.existsSync(dist)) {
   app.get(/.*/, (_req, res) => res.sendFile(path.join(dist, "index.html")));
 }
 
+// Recentrage demandé le 06/11/2026 : ne garder que son propre compte, passer aux niches
+// musique viking et femmes glamour. Exécuté une seule fois (marqué dans les réglages).
+const RECENTRAGE = "recentrage-20261106";
+async function recentrage() {
+  const keep = (process.env.NICHE_MY_HANDLE ?? "galeriedesconneries").replace(/^@/, "").toLowerCase();
+  const before = getSettings();
+  const removed = Number(db.prepare("DELETE FROM accounts WHERE lower(handle) <> ?").run(keep).changes);
+  // Marqué fait tout de suite : un plantage plus loin ne doit pas refaire la suppression.
+  saveSettings({ hashtags: [], keywords: [], packLoaded: "", done: [...before.done, RECENTRAGE] });
+  log(`recentrage : ${removed} compte(s) supprimé(s) avec leurs vidéos, @${keep} conservé`);
+  let info: Parameters<typeof upsertAccount>[0] = { handle: keep };
+  try {
+    info = await fetchTikTokProfile(keep);
+  } catch (e) {
+    log(`recentrage : profil @${keep} : ${(e as Error).message}`);
+  }
+  const acc = upsertAccount(info);
+  db.prepare("UPDATE accounts SET followed = 1 WHERE id = ?").run(acc.id);
+  for (const name of ["musique-viking", "sexy-femme"]) {
+    const r = await loadPack(name, log);
+    console.log(`[niche] pack ${name} : ${r.accounts} compte(s)`);
+  }
+  scheduleRefresh();
+  await runCollection({ discover: true, refresh: false });
+  await runWatch();
+}
+
 const port = Number(process.env.PORT ?? 3001);
 app.listen(port, () => {
   console.log(`[niche] API sur http://localhost:${port}`);
   const count = (db.prepare("SELECT COUNT(*) AS n FROM videos").get() as { n: number }).n;
-  const pack = process.env.NICHE_PACK ?? "humour-fr";
+  const pack = process.env.NICHE_PACK ?? "musique-viking,sexy-femme";
   const settings = getSettings();
   scheduleRefresh();
   scheduleUpdateChecks();
-  if (pack && !settings.packLoaded) {
+  if (!settings.done.includes(RECENTRAGE)) {
+    recentrage().catch((e) => console.error("[niche] recentrage :", (e as Error).message));
+  } else if (pack && !settings.packLoaded) {
     console.log(`[niche] premier lancement : chargement du pack ${pack} (comptes, hashtags, vidéos)…`);
-    loadPack(pack, log)
-      .then(async (r) => {
-        console.log(`[niche] pack ${pack} : ${r.accounts} compte(s), ${r.videos} vidéo(s)`);
-        await runCollection({ discover: true, refresh: false });
-        await runWatch();
-      })
-      .catch((e) => console.error("[niche] pack :", (e as Error).message));
+    (async () => {
+      for (const name of pack.split(",").map((x) => x.trim()).filter(Boolean)) {
+        const r = await loadPack(name, log);
+        console.log(`[niche] pack ${name} : ${r.accounts} compte(s), ${r.videos} vidéo(s)`);
+      }
+      await runCollection({ discover: true, refresh: false });
+      await runWatch();
+    })().catch((e) => console.error("[niche] pack :", (e as Error).message));
   } else if (count === 0 && process.env.NICHE_NO_DEMO !== "1") {
     console.log(`[niche] base vide : ${seedDemo()} vidéos de démonstration ajoutées`);
   }

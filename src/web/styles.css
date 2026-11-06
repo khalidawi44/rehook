@@ -12,6 +12,11 @@ body {
 .card-cover {
   aspect-ratio: 9 / 11;
 }
+/* Taille des cartes (réglage « Miniatures » de la grille) */
+.grid-zoom-3 .card-cover,
+.grid-zoom-4 .card-cover {
+  aspect-ratio: 9 / 16;
+}
 
 .scrollbar-thin::-webkit-scrollbar {
   width: 8px;

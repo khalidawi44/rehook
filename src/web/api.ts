@@ -123,6 +123,19 @@ export type MontageSources = {
 };
 export type MontageJob = { id: string; name: string; status: "running" | "done" | "error"; progress: number; url: string | null; error: string | null; createdAt: number; durationS: number; coverUrl?: string | null };
 export type Project = { id: string; name: string; updatedAt: number; state?: unknown };
+export type Idea = {
+  title: string;
+  hook: string;
+  format: string;
+  durationS: number;
+  script: string[];
+  why: string;
+  hashtags: string[];
+  difficulty: "facile" | "moyen" | "costaud";
+  sources: { id: number; handle: string; url: string; cover: string | null; views: number }[];
+};
+export type IdeasResult = { at: number; days: number; count: number; theme: string; ideas: Idea[]; sourcesCount: number };
+
 export type Trends = {
   days: number;
   virals: number;
@@ -159,7 +172,7 @@ export type Publication = {
 };
 export type Channel = { id: string; name: string; identifier: string; picture?: string; disabled?: boolean };
 
-export type Pack = { name: string; title: string; description: string; accounts: number; hashtags: string[]; videos: number };
+export type Pack = { name: string; title: string; description: string; accounts: number; hashtags: string[]; keywords?: string[]; videos: number };
 
 export type Account = {
   id: number;
@@ -264,6 +277,9 @@ export const api = {
   addAccount: (handle: string) => req<Account>("/api/accounts", { method: "POST", body: JSON.stringify({ handle }) }),
   setFollowed: (id: number, followed: boolean) => req<{ ok: boolean }>(`/api/accounts/${id}`, { method: "PATCH", body: JSON.stringify({ followed }) }),
   deleteAccount: (id: number) => req<{ ok: boolean }>(`/api/accounts/${id}`, { method: "DELETE" }),
+  bulkAccounts: (action: "delete" | "keep" | "unfollow", ids: number[]) => req<{ ok: boolean; changes: number }>("/api/accounts/bulk", { method: "POST", body: JSON.stringify({ action, ids }) }),
+  ideas: () => req<{ running: boolean; result: IdeasResult | null }>("/api/ideas"),
+  generateIdeas: (opts: { days: number; count: number; theme: string }) => req<IdeasResult>("/api/ideas", { method: "POST", body: JSON.stringify(opts) }),
   settings: () => req<Settings>("/api/settings"),
   saveSettings: (s: Partial<Settings>) => req<Settings>("/api/settings", { method: "PUT", body: JSON.stringify(s) }),
   demo: (remove: boolean) => req<{ added?: number; removed?: number }>("/api/demo", { method: "POST", body: JSON.stringify({ remove }) }),

@@ -98,15 +98,16 @@ export const SettingsModal: React.FC<{ stats: Stats | null; onClose: () => void;
         </div>
         {packs.length ? (
           <div className="rounded-xl border border-zinc-800 p-3">
-            <div className="mb-2 text-sm font-medium text-zinc-200">Packs de démarrage</div>
+            <div className="mb-2 text-sm font-medium text-zinc-200">Packs de niche</div>
+            <p className="mb-2 text-xs text-zinc-500">Charger un pack ajoute ses comptes, hashtags et recherches à ceux déjà en place (rien n'est retiré).</p>
             {packs.map((p) => (
               <div key={p.name} className="flex flex-wrap items-center gap-3 text-sm">
                 <div className="flex-1">
-                  <div className="font-medium">{p.title}{s.packLoaded === p.name ? <span className="ml-2 text-xs text-green-400">chargé</span> : null}</div>
+                  <div className="font-medium">{p.title}{s.packLoaded.split(",").includes(p.name) ? <span className="ml-2 text-xs text-green-400">chargé</span> : null}</div>
                   <div className="text-xs text-zinc-500">{p.description} {p.accounts} comptes, {p.videos} vidéos, hashtags {p.hashtags.map((h) => "#" + h).join(" ")}.</div>
                 </div>
                 <button onClick={() => loadPack(p.name)} disabled={busy} className="rounded-lg bg-green-500 px-3 py-1.5 text-xs font-semibold text-black hover:bg-green-400 disabled:opacity-50">
-                  {busy ? "Chargement…" : s.packLoaded === p.name ? "Recharger" : "Charger"}
+                  {busy ? "Chargement…" : s.packLoaded.split(",").includes(p.name) ? "Recharger" : "Charger"}
                 </button>
               </div>
             ))}

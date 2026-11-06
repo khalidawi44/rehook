@@ -12,13 +12,13 @@ const LANGS = [
   ["pt", "Portugais"],
 ];
 
-export const RecreateModal: React.FC<{ card: VideoCard; onClose: () => void; onQueued: () => void }> = ({ card, onClose, onQueued }) => {
+export const RecreateModal: React.FC<{ card: VideoCard; onClose: () => void; onQueued: () => void; initialTwist?: string }> = ({ card, onClose, onQueued, initialTwist }) => {
   const [opts, setOpts] = useState<JobOptions>({
     language: "auto",
     targetSeconds: Math.min(90, Math.max(20, card.durationS ?? 45)),
     captionStyle: "karaoke",
     handle: localStorage.getItem("niche.handle") ?? "",
-    twist: "",
+    twist: initialTwist ?? "",
     images: "",
     voice: "",
     music: null,

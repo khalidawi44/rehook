@@ -4,6 +4,7 @@ import { AlertsPanel } from "./components/AlertsPanel";
 import { RecorderPanel } from "./components/RecorderPanel";
 import { MontagePanel } from "./components/MontagePanel";
 import { TrendsPanel } from "./components/TrendsPanel";
+import { IdeasPanel } from "./components/IdeasPanel";
 import { PlanningPanel } from "./components/PlanningPanel";
 import { VideoCard } from "./components/VideoCard";
 import { VideoModal } from "./components/VideoModal";
@@ -36,6 +37,13 @@ export const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<Card | null>(null);
   const [recreate, setRecreate] = useState<Card | null>(null);
+  const [recreateTwist, setRecreateTwist] = useState("");
+  const [zoomCard, setZoomCard] = useState<Card | null>(null);
+  const [zoom, setZoom] = useState<number>(() => Number(localStorage.getItem("niche.zoom") ?? 2));
+  const setZoomSaved = (z: number) => {
+    setZoom(z);
+    localStorage.setItem("niche.zoom", String(z));
+  };
   const [showSettings, setShowSettings] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -290,6 +298,21 @@ export const App: React.FC = () => {
         {tab === "viral" || tab === "all" ? (
           <>
             {tab === "viral" ? <TrendsPanel /> : null}
+            {tab === "viral" ? (
+              <IdeasPanel
+                notify={notify}
+                hasModel={!!stats?.providers.anthropic}
+                onRecreate={(id, twist) =>
+                  api
+                    .video(id)
+                    .then((v) => {
+                      setRecreateTwist(twist);
+                      setRecreate(v);
+                    })
+                    .catch((e: Error) => notify(e.message))
+                }
+              />
+            ) : null}
             <div className="my-4 flex flex-wrap items-center gap-2 text-sm">
               <div className="flex overflow-hidden rounded-lg border border-zinc-700">
                 {PERIODS.map((p) => (
@@ -331,6 +354,14 @@ export const App: React.FC = () => {
                 placeholder="Rechercher (légende, compte, hashtag)"
                 className="min-w-60 flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5"
               />
+              <div className="flex items-center gap-1 rounded-lg border border-zinc-700 px-2 py-1" title="Taille des miniatures">
+                <span className="text-xs text-zinc-500">Miniatures</span>
+                {[1, 2, 3, 4].map((z) => (
+                  <button key={z} onClick={() => setZoomSaved(z)} className={`rounded px-2 py-0.5 text-xs ${zoom === z ? "bg-zinc-100 text-black" : "hover:bg-zinc-800"}`}>
+                    {["S", "M", "L", "XL"][z - 1]}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {error ? <p className="mb-4 rounded-lg bg-red-500/10 p-3 text-sm text-red-300">{error}</p> : null}
@@ -360,7 +391,7 @@ export const App: React.FC = () => {
                 </div>
               </div>
             ) : null}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className={`grid gap-4 grid-zoom-${zoom}`} style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${[160, 220, 300, 400][zoom - 1]}px), 1fr))` }}>
               {cards.map((c) => (
                 <VideoCard
                   key={c.id}
@@ -369,6 +400,7 @@ export const App: React.FC = () => {
                   onOpen={() => setDetail(c)}
                   onRecreate={() => setRecreate(c)}
                   onFavorite={() => toggleFav(c)}
+                  onZoom={() => setZoomCard(c)}
                 />
               ))}
             </div>
@@ -410,12 +442,48 @@ export const App: React.FC = () => {
           }}
         />
       ) : null}
+      {zoomCard ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4" onClick={() => setZoomCard(null)}>
+          <div className="flex max-h-full flex-col items-center gap-3" onClick={(e) => e.stopPropagation()}>
+            <img src={zoomCard.cover ?? ""} alt="" className="max-h-[80vh] rounded-xl object-contain" />
+            <div className="flex flex-wrap items-center justify-center gap-2 text-sm">
+              <span className="text-zinc-400">@{zoomCard.account.handle} · {fmtNum(zoomCard.metrics.views)} vues</span>
+              <button
+                onClick={() => {
+                  setDetail(zoomCard);
+                  setZoomCard(null);
+                }}
+                className="rounded-lg bg-zinc-100 px-3 py-1.5 font-semibold text-black hover:bg-white"
+              >
+                ▶ Lire la vidéo
+              </button>
+              <button
+                onClick={() => {
+                  setRecreate(zoomCard);
+                  setZoomCard(null);
+                }}
+                className="rounded-lg bg-green-500 px-3 py-1.5 font-semibold text-black hover:bg-green-400"
+              >
+                ↻ Recréer
+              </button>
+              <button onClick={() => setZoomCard(null)} className="rounded-lg border border-zinc-600 px-3 py-1.5 hover:bg-zinc-800">
+                Fermer
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {recreate ? (
         <RecreateModal
           card={recreate}
-          onClose={() => setRecreate(null)}
+          initialTwist={recreateTwist}
+          onClose={() => {
+            setRecreate(null);
+            setRecreateTwist("");
+          }}
           onQueued={() => {
             setRecreate(null);
+            setRecreateTwist("");
             setTab("jobs");
             loadJobs();
             notify("Recréation lancée");

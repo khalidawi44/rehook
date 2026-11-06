@@ -7,7 +7,8 @@ export const VideoCard: React.FC<{
   onOpen: () => void;
   onRecreate: () => void;
   onFavorite: () => void;
-}> = ({ card, now, onOpen, onRecreate, onFavorite }) => {
+  onZoom?: () => void;
+}> = ({ card, now, onOpen, onRecreate, onFavorite, onZoom }) => {
   const m = card.metrics;
   return (
     <article className="flex flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/70 transition hover:border-zinc-600">
@@ -22,6 +23,19 @@ export const VideoCard: React.FC<{
           {card.source === "demo" ? <span className="rounded-md bg-zinc-700/90 px-2 py-0.5 text-xs text-zinc-200">démo</span> : null}
         </div>
         {card.durationS ? <span className="absolute bottom-2 right-2 rounded-md bg-black/70 px-1.5 py-0.5 text-xs">{fmtDuration(card.durationS)}</span> : null}
+        {onZoom && card.cover ? (
+          <span
+            role="button"
+            title="Agrandir la miniature"
+            onClick={(e) => {
+              e.stopPropagation();
+              onZoom();
+            }}
+            className="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-md bg-black/60 text-sm hover:bg-black/80"
+          >
+            🔍
+          </span>
+        ) : null}
         {card.source !== "demo" ? (
           <span className="absolute inset-0 grid place-items-center opacity-0 transition hover:opacity-100">
             <span className="grid h-14 w-14 place-items-center rounded-full bg-black/60 text-2xl">▶</span>

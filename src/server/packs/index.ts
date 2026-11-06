@@ -3,14 +3,16 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { db, saveSettings, upsertAccount } from "../db.js";
+import { db, getSettings, saveSettings, upsertAccount } from "../db.js";
 import { fetchTikTokProfile } from "../providers/tiktok-page.js";
 import { importUrls } from "../collector.js";
 import { removeDemo } from "../providers/demo.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-export type Pack = { name: string; title: string; description: string; accounts: string[]; hashtags: string[]; videos: string[] };
+export type Pack = { name: string; title: string; description: string; accounts: string[]; hashtags: string[]; keywords?: string[]; videos: string[] };
+
+const uniq = (xs: string[]) => [...new Set(xs.map((x) => x.trim().toLowerCase()).filter(Boolean))];
 
 export function listPacks(): Pack[] {
   return fs
@@ -25,10 +27,12 @@ export function getPack(name: string): Pack | null {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export async function loadPack(name: string, log: (l: string) => void): Promise<{ accounts: number; videos: number; errors: string[] }> {
+/** Charge un pack. `replace` : remplace hashtags et mots-clés au lieu de les ajouter aux existants. */
+export async function loadPack(name: string, log: (l: string) => void, replace = false): Promise<{ accounts: number; videos: number; errors: string[] }> {
   const pack = getPack(name);
   if (!pack) throw new Error("Pack inconnu : " + name);
   removeDemo();
+  const before = getSettings();
   let accounts = 0;
   for (const handle of pack.accounts) {
     let info: Parameters<typeof upsertAccount>[0] = { handle };
@@ -42,7 +46,11 @@ export async function loadPack(name: string, log: (l: string) => void): Promise<
     accounts++;
     await sleep(700);
   }
-  saveSettings({ hashtags: pack.hashtags, packLoaded: name });
+  saveSettings({
+    hashtags: replace ? uniq(pack.hashtags) : uniq([...before.hashtags, ...pack.hashtags]),
+    keywords: replace ? uniq(pack.keywords ?? []) : uniq([...before.keywords, ...(pack.keywords ?? [])]),
+    packLoaded: replace || !before.packLoaded ? name : uniq([...before.packLoaded.split(","), name]).join(","),
+  });
   const r = await importUrls(pack.videos);
   log(`pack ${name} : ${accounts} compte(s) suivi(s), ${r.ok} vidéo(s) importée(s)`);
   return { accounts, videos: r.ok, errors: r.errors };

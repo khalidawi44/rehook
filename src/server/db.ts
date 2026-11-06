@@ -179,6 +179,8 @@ export type Settings = {
   videosPerSource: number;
   language: string;
   packLoaded: string;
+  /** Actions ponctuelles déjà exécutées au démarrage (recentrages, migrations). */
+  done: string[];
 };
 
 const DEFAULT_SETTINGS: Settings = {
@@ -195,6 +197,7 @@ const DEFAULT_SETTINGS: Settings = {
   videosPerSource: 30,
   language: "auto",
   packLoaded: "",
+  done: [],
 };
 
 export function getSettings(): Settings {
