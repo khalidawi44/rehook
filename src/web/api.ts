@@ -48,6 +48,7 @@ export type Stats = {
   nextRefresh: number | null;
   now: number;
   unseenAlerts: number;
+  update: { available: boolean; phase: string; changes: string[]; current: string; checkedAt: number | null };
   lanUrls: string[];
   appPort: number;
   devPort: number | null;
@@ -59,7 +60,7 @@ export type Stats = {
     log: string[];
     watch: { running: boolean; lastAt: number | null; nextAt: number | null; lastCount: number; lastAlerts: number };
   };
-  providers: { discovery: string; images: string; voice: string; anthropic: boolean; telegram: boolean; auth: boolean; postiz: boolean; autoExit: boolean };
+  providers: { discovery: string; images: string; voice: string; anthropic: boolean; telegram: boolean; auth: boolean; postiz: boolean; autoExit: boolean; updatable: boolean };
 };
 
 export type Alert = {
@@ -312,6 +313,9 @@ export const api = {
   reminders: () => req<{ id: number; due_at: number; message: string }[]>("/api/reminders"),
   publications: () => req<Publication[]>("/api/publish"),
   publishAnalytics: (key: string) => req<{ channel: string; provider: string; postId: string; metrics: unknown; error?: string }[]>(`/api/publish/${key}/analytics`),
+  updateCheck: () => req<{ available: boolean; phase: string; changes: string[]; current: string; remote: string; error: string | null; log: string[] }>("/api/update?check=1"),
+  updateState: () => req<{ available: boolean; phase: string; changes: string[]; error: string | null; log: string[] }>("/api/update"),
+  updateApply: () => req<{ started: boolean }>("/api/update/apply", { method: "POST", body: "{}" }),
   dubJob: (id: number, to: string) => req<Job>(`/api/jobs/${id}/dub`, { method: "POST", body: JSON.stringify({ to }) }),
   montages: () => req<MontageJob[]>("/api/montage"),
   montage: (id: string) => req<MontageJob>(`/api/montage/${id}`),

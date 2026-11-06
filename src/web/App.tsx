@@ -42,6 +42,50 @@ export const App: React.FC = () => {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [notifPermission, setNotifPermission] = useState<string>(typeof Notification !== "undefined" ? Notification.permission : "unsupported");
   const [toast, setToast] = useState<string | null>(null);
+  const [updating, setUpdating] = useState<{ log: string[]; phase: string; error: string | null } | null>(null);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+
+  const startUpdate = async () => {
+    try {
+      await api.updateApply();
+      setUpdating({ log: [], phase: "updating", error: null });
+    } catch (e) {
+      notify((e as Error).message);
+    }
+  };
+  const checkUpdateNow = async () => {
+    setCheckingUpdate(true);
+    try {
+      const r = await api.updateCheck();
+      if (r.error) notify("Vérification impossible : " + r.error);
+      else notify(r.available ? `Mise à jour disponible (${r.changes.length} changement(s))` : "Niche est à jour");
+      loadStats();
+    } catch (e) {
+      notify((e as Error).message);
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+  // Pendant une mise à jour : suivre le journal, puis attendre le retour du serveur et recharger.
+  useEffect(() => {
+    if (!updating) return;
+    let gone = false;
+    const t = setInterval(async () => {
+      try {
+        const st = await api.updateState();
+        if (gone) {
+          clearInterval(t);
+          location.reload();
+          return;
+        }
+        setUpdating({ log: st.log, phase: st.phase, error: st.error });
+        if (st.phase === "error") clearInterval(t);
+      } catch {
+        gone = true; // serveur en train de redémarrer
+      }
+    }, 1500);
+    return () => clearInterval(t);
+  }, [updating]);
 
   const notify = useCallback((m: string) => {
     setToast(m);
@@ -192,6 +236,17 @@ export const App: React.FC = () => {
             </span>
           ) : null}
           {stats?.providers.autoExit ? <span className="text-zinc-500">Fermer cet onglet arrête Niche.</span> : null}
+          {stats?.providers.updatable ? (
+            stats.update.available ? (
+              <button onClick={startUpdate} className="rounded bg-green-500 px-2 py-0.5 text-xs font-semibold text-black hover:bg-green-400" title={stats.update.changes.join("\n")}>
+                ⬆️ Mise à jour disponible : installer sans fermer
+              </button>
+            ) : (
+              <button onClick={checkUpdateNow} disabled={checkingUpdate} className="text-zinc-500 hover:text-zinc-300" title={`Version ${stats.update.current}`}>
+                {checkingUpdate ? "Vérification…" : `v. ${stats.update.current || "?"} · vérifier les mises à jour`}
+              </button>
+            )
+          ) : null}
           {stats && !stats.providers.anthropic ? (
             <span className="ml-2 rounded bg-amber-500/15 px-2 py-0.5 text-amber-300">ANTHROPIC_API_KEY manquante : la recréation ne marchera pas</span>
           ) : null}
@@ -382,6 +437,19 @@ export const App: React.FC = () => {
             loadStats();
           }}
         />
+      ) : null}
+      {updating ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-zinc-700 bg-zinc-950 p-5">
+            <div className="mb-2 flex items-center gap-2 text-lg font-semibold">
+              {updating.phase === "error" ? "❌ Mise à jour échouée" : "⬆️ Mise à jour en cours"}
+              {updating.phase !== "error" ? <span className="h-3 w-3 animate-pulse rounded-full bg-green-500" /> : null}
+            </div>
+            <p className="text-sm text-zinc-400">{updating.phase === "error" ? updating.error : "Téléchargement, construction de l'interface puis redémarrage : la page se recharge toute seule (une à trois minutes)."}</p>
+            <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-zinc-900 p-2 text-xs text-zinc-300">{updating.log.join("\n") || "…"}</pre>
+            {updating.phase === "error" ? <button onClick={() => setUpdating(null)} className="mt-3 rounded-lg border border-zinc-700 px-3 py-1.5 text-sm hover:bg-zinc-800">Fermer</button> : null}
+          </div>
+        </div>
       ) : null}
       {toast ? <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-zinc-100 px-4 py-2 text-sm font-medium text-black shadow-xl">{toast}</div> : null}
     </div>

@@ -33,6 +33,7 @@ import { voiceProvider } from "./recreate/voice.js";
 import { COVERS_DIR, PUBLIC_DIR, RENDERS_DIR, ROOT } from "./paths.js";
 import { authEnabled, installAuth } from "./auth.js";
 import { autoExitEnabled, installLifecycle } from "./lifecycle.js";
+import { applyUpdate, checkUpdate, scheduleUpdateChecks, updatable, updateState } from "./update.js";
 import { generateTexts, getPublication, listPublications, postizChannels, postizEnabled, postizPublish, resolvePublishSource, savePublication, TextsSchema, type Publication, type PublishSource } from "./publish.js";
 
 const app = express();
@@ -70,6 +71,7 @@ app.get("/api/stats", (req, res) => {
     appPort: port,
     devPort: req.get("host")?.includes(":5173") ? 5173 : null,
     unseenAlerts: unseenCount(),
+    update: { available: updateState.available, phase: updateState.phase, changes: updateState.changes, current: updateState.current.slice(0, 7), checkedAt: updateState.checkedAt },
     settings: getSettings(),
     run: runState,
     providers: {
@@ -81,6 +83,7 @@ app.get("/api/stats", (req, res) => {
       auth: authEnabled(),
       postiz: !!process.env.POSTIZ_API_KEY,
       autoExit: autoExitEnabled(),
+      updatable: updatable(),
     },
   });
 });
@@ -612,6 +615,17 @@ app.post(
   }),
 );
 
+// ---- Mise à jour depuis l'outil ----------------------------------------------
+
+app.get("/api/update", asyncRoute(async (req, res) => void res.json(req.query.check ? await checkUpdate() : updateState)));
+app.post(
+  "/api/update/apply",
+  asyncRoute(async (_req, res) => {
+    res.json({ started: true });
+    applyUpdate().catch(() => {});
+  }),
+);
+
 // ---- Fichiers ----------------------------------------------------------------
 
 app.use("/covers", express.static(COVERS_DIR, { maxAge: "7d" }));
@@ -631,6 +645,7 @@ app.listen(port, () => {
   const pack = process.env.NICHE_PACK ?? "humour-fr";
   const settings = getSettings();
   scheduleRefresh();
+  scheduleUpdateChecks();
   if (pack && !settings.packLoaded) {
     console.log(`[niche] premier lancement : chargement du pack ${pack} (comptes, hashtags, vidéos)…`);
     loadPack(pack, log)

@@ -89,8 +89,7 @@ try {
   }
   # Interface : reconstruite quand elle ne correspond pas au code courant (marqueur dans dist).
   $head = Git "rev-parse HEAD"
-  $srcStamp = (Get-ChildItem -Recurse -File src, index.html, public -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1).LastWriteTime.Ticks
-  $buildKey = "$head|$srcStamp"
+  $buildKey = "$head"
   $buildMarker = "dist\.niche-build"
   $buildKnown = if (Test-Path $buildMarker) { (Get-Content $buildMarker -Raw).Trim() } else { "" }
   if ($updated -or -not (Test-Path "dist\index.html") -or $buildKnown -ne $buildKey) {
@@ -110,16 +109,24 @@ try {
   Say "Demarrage du serveur (arret automatique 2 min apres la fermeture du dernier onglet)."
   $env:PORT = "$port"
   $env:NICHE_AUTO_EXIT = "1"
-  $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c npx tsx src/server/index.ts" -WindowStyle Hidden -PassThru -RedirectStandardOutput $log -RedirectStandardError (Join-Path $here "data\niche.err.log")
-  $ok = $false
-  for ($i = 0; $i -lt 120; $i++) {
-    Start-Sleep -Milliseconds 500
-    if (ApiUp) { $ok = $true; break }
-    if ($proc.HasExited) { break }
-  }
-  if ($ok) { Say "Pret : ouverture de $url"; Start-Process $url } else { Fail "Le serveur n'a pas demarre. Regarde data\niche.err.log." }
-  Wait-Process -Id $proc.Id
-  Say "Serveur arrete."
+  $first = $true
+  do {
+    $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c npx tsx src/server/index.ts" -WindowStyle Hidden -PassThru -RedirectStandardOutput $log -RedirectStandardError (Join-Path $here "data\niche.err.log")
+    $ok = $false
+    for ($i = 0; $i -lt 120; $i++) {
+      Start-Sleep -Milliseconds 500
+      if (ApiUp) { $ok = $true; break }
+      if ($proc.HasExited) { break }
+    }
+    if ($ok) {
+      if ($first) { Say "Pret : ouverture de $url"; Start-Process $url } else { Say "Redemarre apres mise a jour." }
+    } else { Fail "Le serveur n'a pas demarre. Regarde data\niche.err.log." }
+    $first = $false
+    Wait-Process -Id $proc.Id
+    $code = $proc.ExitCode
+    # 75 = redemarrage demande par la mise a jour depuis l'outil (code deja a jour et reconstruit).
+  } while ($code -eq 75)
+  Say "Serveur arrete (code $code)."
 } catch {
   Fail $_.Exception.Message
 }
