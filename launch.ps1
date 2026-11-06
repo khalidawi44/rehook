@@ -110,8 +110,11 @@ try {
   $env:PORT = "$port"
   $env:NICHE_AUTO_EXIT = "1"
   $first = $true
+  $restartFlag = Join-Path $here "data\restart.flag"
   do {
+    Remove-Item $restartFlag -Force -ErrorAction SilentlyContinue
     $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c npx tsx src/server/index.ts" -WindowStyle Hidden -PassThru -RedirectStandardOutput $log -RedirectStandardError (Join-Path $here "data\niche.err.log")
+    $null = $proc.Handle
     $ok = $false
     for ($i = 0; $i -lt 120; $i++) {
       Start-Sleep -Milliseconds 500
@@ -122,10 +125,12 @@ try {
       if ($first) { Say "Pret : ouverture de $url"; Start-Process $url } else { Say "Redemarre apres mise a jour." }
     } else { Fail "Le serveur n'a pas demarre. Regarde data\niche.err.log." }
     $first = $false
-    Wait-Process -Id $proc.Id
+    $proc.WaitForExit()
     $code = $proc.ExitCode
-    # 75 = redemarrage demande par la mise a jour depuis l'outil (code deja a jour et reconstruit).
-  } while ($code -eq 75)
+    # Redemarrage demande par la mise a jour depuis l'outil : fichier-temoin (ou code 75).
+    $again = (Test-Path $restartFlag) -or ($code -eq 75)
+    if ($again) { Say "Redemarrage demande par la mise a jour." }
+  } while ($again)
   Say "Serveur arrete (code $code)."
 } catch {
   Fail $_.Exception.Message

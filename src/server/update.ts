@@ -75,6 +75,8 @@ export async function applyUpdate(): Promise<void> {
     log("redémarrage");
     updateState.phase = "restarting";
     updateState.available = false;
+    // Fichier-témoin lu par le lanceur : relancer le serveur après l'arrêt.
+    fs.writeFileSync(path.join(ROOT, "data", "restart.flag"), new Date().toISOString());
     setTimeout(() => process.exit(75), 800);
   } catch (e) {
     updateState.phase = "error";
