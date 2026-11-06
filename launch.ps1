@@ -19,6 +19,13 @@ function Git([string]$arguments) {
   $script:gitExit = $LASTEXITCODE
   return ($out | Out-String).Trim()
 }
+# Idem pour npm et npx : leurs avertissements passent par stderr, ce n'est pas une erreur.
+function Run([string]$commandLine) {
+  $out = cmd /c "$commandLine 2>&1"
+  $script:runExit = $LASTEXITCODE
+  ($out | Out-String) | Out-File -Append -Encoding utf8 $launcherLog
+  return $script:runExit
+}
 function Fail($m) {
   Say ("ERREUR : " + $m)
   Add-Type -AssemblyName System.Windows.Forms
@@ -77,8 +84,7 @@ try {
   $lockKnown = if (Test-Path $lockMarker) { (Get-Content $lockMarker -Raw).Trim() } else { "" }
   if ($updated -or -not (Test-Path "node_modules") -or $lockKnown -ne $lockHash) {
     Say "npm install..."
-    cmd /c "npm install --no-audit --no-fund" 2>&1 | Out-File -Append -Encoding utf8 $launcherLog
-    if ($LASTEXITCODE -ne 0) { Fail "npm install a echoue." }
+    if ((Run "npm install --no-audit --no-fund") -ne 0) { Fail "npm install a echoue (voir le journal)." }
     $lockHash | Out-File -Encoding ascii $lockMarker
   }
   # Interface : reconstruite quand elle ne correspond pas au code courant (marqueur dans dist).
@@ -89,11 +95,10 @@ try {
   $buildKnown = if (Test-Path $buildMarker) { (Get-Content $buildMarker -Raw).Trim() } else { "" }
   if ($updated -or -not (Test-Path "dist\index.html") -or $buildKnown -ne $buildKey) {
     Say "npm run build..."
-    cmd /c "npm run build" 2>&1 | Out-File -Append -Encoding utf8 $launcherLog
-    if ($LASTEXITCODE -ne 0) { Fail "La construction de l'interface a echoue." }
+    if ((Run "npm run build") -ne 0) { Fail "La construction de l'interface a echoue (voir le journal)." }
     $buildKey | Out-File -Encoding ascii $buildMarker
   }
-  try { cmd /c "npx playwright install chromium" 2>&1 | Out-File -Append -Encoding utf8 $launcherLog } catch { Say "Playwright : $($_.Exception.Message)" }
+  if ((Run "npx playwright install chromium") -ne 0) { Say "Playwright : installation du navigateur impossible pour l'instant (la decouverte TikTok attendra)." }
 
   if (-not (Test-Path ".env")) {
     Copy-Item ".env.example" ".env"
