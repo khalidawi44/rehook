@@ -245,6 +245,61 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
     setHead(tt);
     seekTo(tt, playing);
   };
+  const goToRef = useRef(goTo);
+  goToRef.current = goTo;
+  const trackRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ kind: "scrub" } | { kind: "trim"; uid: string; edge: "in" | "out"; startX: number; inS: number; outS: number } | null>(null);
+  const timelineLen = total + td * Math.max(0, clips.length - 1);
+  const xToTime = (clientX: number) => {
+    const r = trackRef.current?.getBoundingClientRect();
+    if (!r || !r.width) return 0;
+    return ((clientX - r.left) / r.width) * total;
+  };
+  const onTrackDown = (e: React.PointerEvent) => {
+    if (!clips.length) return;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    dragRef.current = { kind: "scrub" };
+    goTo(xToTime(e.clientX));
+  };
+  const onTrackMove = (e: React.PointerEvent) => {
+    const d = dragRef.current;
+    if (!d) return;
+    if (d.kind === "scrub") return goTo(xToTime(e.clientX));
+    const r = trackRef.current?.getBoundingClientRect();
+    if (!r || !r.width) return;
+    const dt = ((e.clientX - d.startX) / r.width) * Math.max(0.01, timelineLen);
+    const c = clipsRef.current.find((x) => x.uid === d.uid);
+    if (!c) return;
+    if (d.edge === "in") update(d.uid, { inS: Math.max(0, Math.min(d.outS - 0.1, d.inS + dt * c.speed)) });
+    else update(d.uid, { outS: Math.min(c.durationS, Math.max(d.inS + 0.1, d.outS + dt * c.speed)) });
+  };
+  const onTrackUp = () => (dragRef.current = null);
+  const startTrim = (e: React.PointerEvent, c: TClip, edge: "in" | "out") => {
+    e.stopPropagation();
+    (trackRef.current as HTMLElement | null)?.setPointerCapture(e.pointerId);
+    dragRef.current = { kind: "trim", uid: c.uid, edge, startX: e.clientX, inS: c.inS, outS: c.outS };
+    setSel(c.uid);
+    setTool("clip");
+  };
+
+  // Raccourcis : espace lecture, flèches ±0,1 s (Maj : ±1 s), S couper, I/O début/fin, Suppr.
+  const actionsRef = useRef<{ togglePlay: () => void; split: () => void; setIn: () => void; setOut: () => void; remove: () => void }>({ togglePlay: () => {}, split: () => {}, setIn: () => {}, setOut: () => {}, remove: () => {} });
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+      const a = actionsRef.current;
+      if (e.code === "Space") { e.preventDefault(); a.togglePlay(); }
+      else if (e.key === "ArrowLeft") { e.preventDefault(); goToRef.current(headRef.current - (e.shiftKey ? 1 : 0.1)); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); goToRef.current(headRef.current + (e.shiftKey ? 1 : 0.1)); }
+      else if (e.key === "s" || e.key === "S") a.split();
+      else if (e.key === "i" || e.key === "I") a.setIn();
+      else if (e.key === "o" || e.key === "O") a.setOut();
+      else if (e.key === "Delete" || e.key === "Backspace") a.remove();
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
 
   const add = async (src: ClipSource, label: string, url: string, known?: number | null) => {
     const d = known && known > 0 ? known : await probeDuration(url);
@@ -298,6 +353,8 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
     const i = clips.findIndex((c) => c.uid === selected.uid);
     setClips((cs) => [...cs.slice(0, i + 1), { ...selected, uid: uid() }, ...cs.slice(i + 1)]);
   };
+  actionsRef.current = { togglePlay, split: splitAtHead, setIn: setInHere, setOut: setOutHere, remove };
+
   const toggleEffect = (e: ClipEffect) => {
     if (!selected) return;
     const has = selected.effects.includes(e);
@@ -394,6 +451,43 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
   const activeTexts = texts.filter((t) => head >= t.start && head <= t.end);
   const previewScale = 420 / 1920;
 
+  // Aperçu en direct des effets du clip courant (approximation CSS de ce que fera l'export).
+  const live = (() => {
+    const loc = locate(head);
+    const c = loc ? clips[loc.index] : null;
+    if (!c) return { filter: "", transform: "", opacity: 1, vignette: false, letterbox: false, pixelate: false };
+    const span = Math.max(0.05, c.outS - c.inS);
+    const p = Math.max(0, Math.min(1, (loc!.local - c.inS) / span));
+    const local = loc!.local - c.inS;
+    const remaining = c.outS - loc!.local;
+    const f: string[] = [];
+    let transform = "";
+    let opacity = 1;
+    for (const e of c.effects) {
+      if (e === "bw") f.push("grayscale(1)");
+      if (e === "sepia") f.push("sepia(1)");
+      if (e === "vintage") f.push("sepia(.45) contrast(1.1) saturate(.85) brightness(.95)");
+      if (e === "cinematic") f.push("contrast(1.12) saturate(1.05) hue-rotate(-6deg)");
+      if (e === "warm") f.push("sepia(.25) saturate(1.2)");
+      if (e === "cold") f.push("hue-rotate(18deg) saturate(.9)");
+      if (e === "punch") f.push("contrast(1.18) saturate(1.25)");
+      if (e === "contrast-hard") f.push("contrast(1.4) brightness(.97) saturate(.9)");
+      if (e === "invert") f.push("invert(1)");
+      if (e === "blur") f.push("blur(5px)");
+      if (e === "glow") f.push("brightness(1.12) contrast(1.05) saturate(1.1)");
+      if (e === "dream") f.push("saturate(1.15) brightness(1.08) blur(0.6px)");
+      if (e === "sharpen") f.push("contrast(1.06)");
+      if (e === "mirror") transform += " scaleX(-1)";
+      if (e === "zoom-in") transform += ` scale(${(1 + 0.25 * p).toFixed(3)})`;
+      if (e === "zoom-out") transform += ` scale(${(1.25 - 0.25 * p).toFixed(3)})`;
+      if (e === "shake") transform += ` translate(${(Math.sin(head * 37) * 1.2).toFixed(2)}%, ${(Math.cos(head * 29) * 1.2).toFixed(2)}%) scale(1.06)`;
+      if (e === "fade-in" && local < 0.35) opacity = Math.min(opacity, local / 0.35);
+      if (e === "fade-out" && remaining < 0.35) opacity = Math.min(opacity, Math.max(0, remaining / 0.35));
+    }
+    const flash = c.effects.includes("flash") && local < 0.25 ? 1 - local / 0.25 : 0;
+    return { filter: f.join(" "), transform: transform.trim(), opacity, flash, vignette: c.effects.includes("vignette"), letterbox: c.effects.includes("letterbox"), pixelate: c.effects.includes("pixelate") };
+  })();
+
   type LibItem = { id: string; name: string; durationS: number | null; cover: string | null; url: string };
   const lib: LibItem[] = !sources
     ? []
@@ -475,7 +569,20 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
       <div className="min-w-0 space-y-3">
         <div className="grid gap-3 lg:grid-cols-[auto_1fr]">
           <div className="relative mx-auto max-w-full rounded-xl border border-zinc-800 bg-black" style={{ height: 420, maxHeight: "60vh", aspectRatio: `${out.w} / ${out.h}` }}>
-            <video ref={videoRef} playsInline className="h-full w-full rounded-xl" style={{ objectFit: fit }} />
+            <video
+              ref={videoRef}
+              playsInline
+              className="h-full w-full rounded-xl"
+              style={{ objectFit: fit, filter: live.filter || undefined, transform: live.transform || undefined, opacity: live.opacity, imageRendering: live.pixelate ? "pixelated" : undefined }}
+            />
+            {live.vignette ? <div className="pointer-events-none absolute inset-0 rounded-xl" style={{ background: "radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,0.75) 100%)" }} /> : null}
+            {live.letterbox ? (
+              <>
+                <div className="pointer-events-none absolute left-0 top-0 h-[10%] w-full bg-black" />
+                <div className="pointer-events-none absolute bottom-0 left-0 h-[10%] w-full bg-black" />
+              </>
+            ) : null}
+            {live.flash ? <div className="pointer-events-none absolute inset-0 rounded-xl bg-white" style={{ opacity: live.flash }} /> : null}
             <audio ref={musicRef} src={musicSel ? music.find((m) => m.file === musicSel)?.url : undefined} loop />
             {activeCue ? (
               <div
@@ -750,34 +857,33 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
           <button onClick={() => goTo(head - 0.1)} className="rounded-lg border border-zinc-700 px-2 py-1.5 hover:bg-zinc-800">-0,1</button>
           <button onClick={() => goTo(head + 0.1)} className="rounded-lg border border-zinc-700 px-2 py-1.5 hover:bg-zinc-800">+0,1</button>
           <button onClick={() => goTo(head + 1)} className="rounded-lg border border-zinc-700 px-2 py-1.5 hover:bg-zinc-800">+1 s</button>
-          <span className="ml-auto text-xs text-zinc-500">Effets, transitions et musique s'entendent et se voient à l'export ; l'aperçu montre coupes, sous-titres et textes.</span>
+          <span className="ml-auto text-xs text-zinc-500">Glisse sur la barre pour avancer ou reculer, tire les bords d'un clip pour le couper. Clavier : espace, ← →, S couper, I début, O fin, Suppr.</span>
         </div>
         <div
-          className="relative h-24 w-full cursor-pointer select-none overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900"
-          onClick={(e) => {
-            const r = e.currentTarget.getBoundingClientRect();
-            goTo(((e.clientX - r.left) / r.width) * total);
-          }}
+          ref={trackRef}
+          className="relative h-24 w-full cursor-col-resize select-none overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 touch-none"
+          onPointerDown={onTrackDown}
+          onPointerMove={onTrackMove}
+          onPointerUp={onTrackUp}
+          onPointerCancel={onTrackUp}
         >
           {!clips.length ? <div className="grid h-full place-items-center text-xs text-zinc-500">Ajoute des clips depuis le chutier à gauche.</div> : null}
           <div className="flex h-14">
             {clips.map((c, i) => (
               <div
                 key={c.uid}
-                onClick={(e) => {
-                  e.stopPropagation();
+                onPointerDown={() => {
                   setSel(c.uid);
                   setTool("clip");
-                  let acc = 0;
-                  for (let k = 0; k < i; k++) acc += clipLen(clips[k]);
-                  goTo(acc + 0.001);
                 }}
-                style={{ width: `${(clipLen(c) / Math.max(0.01, total + td * Math.max(0, clips.length - 1))) * 100}%`, background: `hsl(${(i * 67) % 360} 45% ${sel === c.uid ? 38 : 24}%)` }}
-                className={`relative h-full overflow-hidden border-r border-black/50 px-2 py-1 text-xs ${sel === c.uid ? "ring-2 ring-inset ring-green-400" : ""}`}
+                style={{ width: `${(clipLen(c) / Math.max(0.01, timelineLen)) * 100}%`, background: `hsl(${(i * 67) % 360} 45% ${sel === c.uid ? 38 : 24}%)` }}
+                className={`relative h-full overflow-hidden border-r border-black/50 px-3 py-1 text-xs ${sel === c.uid ? "ring-2 ring-inset ring-green-400" : ""}`}
                 title={`${c.name} : ${fmtS(c.inS)} à ${fmtS(c.outS)}`}
               >
                 <div className="truncate font-medium">{c.name}</div>
-                <div className="text-[10px] opacity-80">{fmtS(c.inS)} → {fmtS(c.outS)} {c.speed !== 1 ? `· x${c.speed}` : ""} {c.mute ? "· 🔇" : ""} {c.effects.length ? `· ${c.effects.length} effet(s)` : ""}</div>
+                <div className="truncate text-[10px] opacity-80">{fmtS(c.inS)} → {fmtS(c.outS)} {c.speed !== 1 ? `· x${c.speed}` : ""} {c.mute ? "· 🔇" : ""} {c.effects.length ? `· ${c.effects.length} effet(s)` : ""}</div>
+                <div onPointerDown={(e) => startTrim(e, c, "in")} className="absolute left-0 top-0 h-full w-2 cursor-ew-resize bg-white/20 hover:bg-green-400/70" title="Tirer pour couper le début" />
+                <div onPointerDown={(e) => startTrim(e, c, "out")} className="absolute right-0 top-0 h-full w-2 cursor-ew-resize bg-white/20 hover:bg-green-400/70" title="Tirer pour couper la fin" />
               </div>
             ))}
           </div>
