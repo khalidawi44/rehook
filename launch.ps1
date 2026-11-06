@@ -71,15 +71,27 @@ try {
     Start-Sleep -Seconds 1
   }
 
-  if ($updated -or -not (Test-Path "node_modules")) {
+  # Dependances : reinstallees quand package-lock.json a change (marqueur dans node_modules).
+  $lockHash = (Get-FileHash package-lock.json -Algorithm SHA256).Hash
+  $lockMarker = "node_modules\.niche-lock"
+  $lockKnown = if (Test-Path $lockMarker) { (Get-Content $lockMarker -Raw).Trim() } else { "" }
+  if ($updated -or -not (Test-Path "node_modules") -or $lockKnown -ne $lockHash) {
     Say "npm install..."
     cmd /c "npm install --no-audit --no-fund" 2>&1 | Out-File -Append -Encoding utf8 $launcherLog
     if ($LASTEXITCODE -ne 0) { Fail "npm install a echoue." }
+    $lockHash | Out-File -Encoding ascii $lockMarker
   }
-  if ($updated -or -not (Test-Path "dist\index.html")) {
+  # Interface : reconstruite quand elle ne correspond pas au code courant (marqueur dans dist).
+  $head = Git "rev-parse HEAD"
+  $srcStamp = (Get-ChildItem -Recurse -File src, index.html, public -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1).LastWriteTime.Ticks
+  $buildKey = "$head|$srcStamp"
+  $buildMarker = "dist\.niche-build"
+  $buildKnown = if (Test-Path $buildMarker) { (Get-Content $buildMarker -Raw).Trim() } else { "" }
+  if ($updated -or -not (Test-Path "dist\index.html") -or $buildKnown -ne $buildKey) {
     Say "npm run build..."
     cmd /c "npm run build" 2>&1 | Out-File -Append -Encoding utf8 $launcherLog
     if ($LASTEXITCODE -ne 0) { Fail "La construction de l'interface a echoue." }
+    $buildKey | Out-File -Encoding ascii $buildMarker
   }
   try { cmd /c "npx playwright install chromium" 2>&1 | Out-File -Append -Encoding utf8 $launcherLog } catch { Say "Playwright : $($_.Exception.Message)" }
 
