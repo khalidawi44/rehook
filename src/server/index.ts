@@ -26,6 +26,7 @@ import { imageProvider } from "./recreate/images.js";
 import { voiceProvider } from "./recreate/voice.js";
 import { COVERS_DIR, PUBLIC_DIR, RENDERS_DIR, ROOT } from "./paths.js";
 import { authEnabled, installAuth } from "./auth.js";
+import { autoExitEnabled, installLifecycle } from "./lifecycle.js";
 import { generateTexts, getPublication, listPublications, postizChannels, postizEnabled, postizPublish, resolvePublishSource, savePublication, TextsSchema, type Publication, type PublishSource } from "./publish.js";
 
 const app = express();
@@ -33,6 +34,7 @@ if (process.env.NICHE_BEHIND_PROXY === "1") app.set("trust proxy", 1);
 app.use(express.urlencoded({ extended: false, limit: "64kb" }));
 installAuth(app);
 app.use(express.json({ limit: "1mb" }));
+installLifecycle(app);
 
 const asyncRoute =
   (fn: (req: express.Request, res: express.Response) => Promise<void>) =>
@@ -72,6 +74,7 @@ app.get("/api/stats", (req, res) => {
       telegram: !!(process.env.NICHE_TELEGRAM_BOT_TOKEN && process.env.NICHE_TELEGRAM_CHAT_ID),
       auth: authEnabled(),
       postiz: !!process.env.POSTIZ_API_KEY,
+      autoExit: autoExitEnabled(),
     },
   });
 });

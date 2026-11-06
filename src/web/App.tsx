@@ -189,6 +189,7 @@ export const App: React.FC = () => {
                   : "Veille désactivée."}
             </span>
           ) : null}
+          {stats?.providers.autoExit ? <span className="text-zinc-500">Fermer cet onglet arrête Niche.</span> : null}
           {stats && !stats.providers.anthropic ? (
             <span className="ml-2 rounded bg-amber-500/15 px-2 py-0.5 text-amber-300">ANTHROPIC_API_KEY manquante : la recréation ne marchera pas</span>
           ) : null}

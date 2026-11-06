@@ -59,7 +59,7 @@ export type Stats = {
     log: string[];
     watch: { running: boolean; lastAt: number | null; nextAt: number | null; lastCount: number; lastAlerts: number };
   };
-  providers: { discovery: string; images: string; voice: string; anthropic: boolean; telegram: boolean; auth: boolean; postiz: boolean };
+  providers: { discovery: string; images: string; voice: string; anthropic: boolean; telegram: boolean; auth: boolean; postiz: boolean; autoExit: boolean };
 };
 
 export type Alert = {

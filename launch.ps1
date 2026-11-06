@@ -102,8 +102,9 @@ try {
     Start-Process -Wait notepad ".env"
   }
 
-  Say "Demarrage du serveur."
+  Say "Demarrage du serveur (arret automatique 2 min apres la fermeture du dernier onglet)."
   $env:PORT = "$port"
+  $env:NICHE_AUTO_EXIT = "1"
   $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c npx tsx src/server/index.ts" -WindowStyle Hidden -PassThru -RedirectStandardOutput $log -RedirectStandardError (Join-Path $here "data\niche.err.log")
   $ok = $false
   for ($i = 0; $i -lt 120; $i++) {
