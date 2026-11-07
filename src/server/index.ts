@@ -12,7 +12,7 @@ import { listAlerts, markSeen, unseenCount } from "./alerts.js";
 import { listPacks, loadPack } from "./packs/index.js";
 import { deleteCapture, getConvertJob, listCaptures, saveCapture, startCaptureConversion } from "./captures.js";
 import { ensureSourceFile } from "./recreate/analyze.js";
-import { CLIP_EFFECTS, deleteMusic, getMontage, listMontages, listMusic, montageSources, saveMusic, startMontage, transcribeMontage, type ClipEffect, type MontageRequest } from "./montage.js";
+import { CLIP_EFFECTS, deleteMusic, deleteSticker, getMontage, listMontages, listMusic, listStickers, montageSources, saveMusic, saveSticker, startMontage, transcribeMontage, type ClipEffect, type MontageRequest } from "./montage.js";
 import { ensureSourceFile as ensureSource } from "./recreate/analyze.js";
 import { FFMPEG } from "./media.js";
 import { execFile as execFileCb } from "node:child_process";
@@ -358,8 +358,9 @@ app.get("/api/montage/:id", (req, res) => {
   if (!j) return res.status(404).json({ error: "Export introuvable" });
   res.json(j);
 });
+const ClipSourceSchema = z.object({ kind: z.enum(["video", "capture", "render"]), id: z.string() });
 const ClipSchema = z.object({
-  source: z.object({ kind: z.enum(["video", "capture", "render"]), id: z.string() }),
+  source: ClipSourceSchema,
   inS: z.number().min(0),
   outS: z.number().min(0),
   mute: z.boolean().optional(),
@@ -367,6 +368,55 @@ const ClipSchema = z.object({
   speed: z.number().min(0.25).max(4).optional(),
   effects: z.array(z.enum(CLIP_EFFECTS as [ClipEffect, ...ClipEffect[]])).optional(),
   smartCrop: z.boolean().optional(),
+  reverse: z.boolean().optional(),
+  rotate: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]).optional(),
+  flipH: z.boolean().optional(),
+  flipV: z.boolean().optional(),
+  adjust: z
+    .object({
+      brightness: z.number().min(-1).max(1).optional(),
+      contrast: z.number().min(0).max(3).optional(),
+      saturation: z.number().min(0).max(3).optional(),
+      gamma: z.number().min(0.1).max(10).optional(),
+      temperature: z.number().min(-1).max(1).optional(),
+      hue: z.number().min(-180).max(180).optional(),
+      sharpen: z.number().min(-2).max(3).optional(),
+      opacity: z.number().min(0).max(1).optional(),
+    })
+    .nullable()
+    .optional(),
+  zoom: z.object({ start: z.number().min(1).max(4), end: z.number().min(1).max(4), x: z.number().min(0).max(1), y: z.number().min(0).max(1) }).nullable().optional(),
+  freeze: z.object({ at: z.enum(["start", "end"]), durationS: z.number().min(0).max(10) }).nullable().optional(),
+  audio: z
+    .object({
+      fadeInS: z.number().min(0).max(10).optional(),
+      fadeOutS: z.number().min(0).max(10).optional(),
+      denoise: z.boolean().optional(),
+      pitch: z.number().min(-12).max(12).optional(),
+      boost: z.boolean().optional(),
+      bass: z.number().min(-20).max(20).optional(),
+      treble: z.number().min(-20).max(20).optional(),
+      echo: z.boolean().optional(),
+    })
+    .nullable()
+    .optional(),
+  chroma: z.object({ color: z.string().max(9), similarity: z.number().min(0.01).max(1), blend: z.number().min(0).max(1), bgColor: z.string().max(9).optional(), background: ClipSourceSchema.nullable().optional() }).nullable().optional(),
+  mask: z.enum(["none", "circle", "rounded", "heart", "star", "diamond"]).optional(),
+});
+const OverlaySchema = z.object({
+  id: z.string().max(40),
+  kind: z.enum(["image", "video"]),
+  file: z.string().max(200).optional(),
+  source: ClipSourceSchema.optional(),
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  w: z.number().min(0.02).max(1),
+  start: z.number().min(0),
+  end: z.number().min(0),
+  opacity: z.number().min(0).max(1).optional(),
+  rotate: z.number().min(-360).max(360).optional(),
+  mute: z.boolean().optional(),
+  shape: z.enum(["rect", "circle", "rounded"]).optional(),
 });
 const WordSchema = z.object({ text: z.string(), start: z.number(), end: z.number() });
 const CueSchema = z.object({ id: z.string(), start: z.number(), end: z.number(), text: z.string().max(500), words: z.array(WordSchema) });
@@ -413,6 +463,8 @@ const MontageSchema = z.object({
   subtitles: z.object({ cues: z.array(CueSchema).max(2000), style: StyleSchema }).nullable().optional(),
   texts: z.array(TextSchema).max(200).optional(),
   cover: z.object({ atS: z.number().min(0), title: z.string().max(120) }).nullable().optional(),
+  overlays: z.array(OverlaySchema).max(40).optional(),
+  padColor: z.string().max(9).optional(),
 });
 function parseMontage(body: unknown): MontageRequest | string {
   const parsed = MontageSchema.safeParse(body);
@@ -551,6 +603,21 @@ app.post(
   }),
 );
 app.delete("/api/music/:file", (req, res) => res.json({ ok: deleteMusic(String(req.params.file)) }));
+
+// ---- Stickers et images pour les calques du montage ------------------------
+app.get("/api/stickers", (_req, res) => res.json(listStickers()));
+app.post(
+  "/api/stickers",
+  express.raw({ type: ["image/*", "application/octet-stream"], limit: "30mb" }),
+  (req, res) => {
+    const body = req.body as Buffer;
+    if (!body?.length) return void res.status(400).json({ error: "Fichier vide" });
+    const name = String(req.query.name ?? "sticker.png");
+    if (!/\.(png|jpe?g|webp|gif)$/i.test(name)) return void res.status(400).json({ error: "Image attendue (png, jpg, webp ou gif)" });
+    res.json(saveSticker(body, name));
+  },
+);
+app.delete("/api/stickers/:file", (req, res) => res.json({ ok: deleteSticker(String(req.params.file)) }));
 /** Extrait la bande son d'un clip (vidéo relevée, enregistrement, rendu) vers la bibliothèque musique. */
 app.post(
   "/api/music/extract",

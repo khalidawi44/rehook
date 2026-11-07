@@ -20,9 +20,39 @@ const execFileP = promisify(execFile);
 export type ClipSource = { kind: "video" | "capture" | "render"; id: string };
 export type ClipEffect =
   | "zoom-in" | "zoom-out" | "bw" | "warm" | "cold" | "vignette" | "mirror" | "sharpen" | "punch" | "fade-in" | "fade-out" | "blur-bg"
-  | "sepia" | "vintage" | "cinematic" | "glow" | "blur" | "pixelate" | "invert" | "shake" | "letterbox" | "flash" | "dream" | "contrast-hard";
-export const CLIP_EFFECTS: ClipEffect[] = ["zoom-in", "zoom-out", "bw", "warm", "cold", "vignette", "mirror", "sharpen", "punch", "fade-in", "fade-out", "blur-bg", "sepia", "vintage", "cinematic", "glow", "blur", "pixelate", "invert", "shake", "letterbox", "flash", "dream", "contrast-hard"];
-export type Clip = { source: ClipSource; inS: number; outS: number; mute?: boolean; volume?: number; speed?: number; effects?: ClipEffect[]; smartCrop?: boolean; cropX?: number | null };
+  | "sepia" | "vintage" | "cinematic" | "glow" | "blur" | "pixelate" | "invert" | "shake" | "letterbox" | "flash" | "dream" | "contrast-hard"
+  | "teal-orange" | "noir" | "pastel" | "faded" | "vivid" | "matte" | "neon" | "old-film" | "stabilize" | "vhs" | "rgb-split" | "spin";
+export const CLIP_EFFECTS: ClipEffect[] = ["zoom-in", "zoom-out", "bw", "warm", "cold", "vignette", "mirror", "sharpen", "punch", "fade-in", "fade-out", "blur-bg", "sepia", "vintage", "cinematic", "glow", "blur", "pixelate", "invert", "shake", "letterbox", "flash", "dream", "contrast-hard", "teal-orange", "noir", "pastel", "faded", "vivid", "matte", "neon", "old-film", "stabilize", "vhs", "rgb-split", "spin"];
+/** Réglages image (comme CapCut « Ajuster ») : 0 = neutre pour tout sauf contraste, saturation et gamma (1 = neutre). */
+export type ClipAdjust = { brightness?: number; contrast?: number; saturation?: number; gamma?: number; temperature?: number; hue?: number; sharpen?: number; opacity?: number };
+export type ClipZoom = { start: number; end: number; x: number; y: number };
+export type ClipFreeze = { at: "start" | "end"; durationS: number };
+export type ClipAudio = { fadeInS?: number; fadeOutS?: number; denoise?: boolean; pitch?: number; boost?: boolean; bass?: number; treble?: number; echo?: boolean };
+export type ClipChroma = { color: string; similarity: number; blend: number; bgColor?: string; background?: ClipSource | null };
+export type ClipMask = "none" | "circle" | "rounded" | "heart" | "star" | "diamond";
+export type Clip = {
+  source: ClipSource;
+  inS: number;
+  outS: number;
+  mute?: boolean;
+  volume?: number;
+  speed?: number;
+  effects?: ClipEffect[];
+  smartCrop?: boolean;
+  cropX?: number | null;
+  reverse?: boolean;
+  rotate?: 0 | 90 | 180 | 270;
+  flipH?: boolean;
+  flipV?: boolean;
+  adjust?: ClipAdjust | null;
+  zoom?: ClipZoom | null;
+  freeze?: ClipFreeze | null;
+  audio?: ClipAudio | null;
+  chroma?: ClipChroma | null;
+  mask?: ClipMask;
+};
+/** Calque posé sur toute la vidéo : image (sticker, logo) ou vidéo incrustée (PiP). Positions et taille en fraction de l'image. */
+export type Overlay = { id: string; kind: "image" | "video"; file?: string; source?: ClipSource; x: number; y: number; w: number; start: number; end: number; opacity?: number; rotate?: number; mute?: boolean; shape?: "rect" | "circle" | "rounded" };
 export type MusicOptions = { file: string; volume?: number; startS?: number; fadeInS?: number; fadeOutS?: number; duck?: boolean };
 export type MontageRequest = {
   name?: string;
@@ -37,6 +67,8 @@ export type MontageRequest = {
   subtitles?: { cues: Cue[]; style: Partial<SubtitleStyle> } | null;
   texts?: TextItem[];
   cover?: { atS: number; title: string } | null;
+  overlays?: Overlay[];
+  padColor?: string;
 };
 
 export type MontageJob = {
@@ -181,7 +213,74 @@ export function deleteMusic(file: string): boolean {
 
 // ---- Graphe ffmpeg -----------------------------------------------------------
 
-const clipLen = (c: Clip) => Math.max(0.05, (c.outS - c.inS) / Math.min(4, Math.max(0.25, c.speed ?? 1)));
+const clipSpeed = (c: Clip) => Math.min(4, Math.max(0.25, c.speed ?? 1));
+const freezeLen = (c: Clip) => (c.freeze && c.freeze.durationS > 0 ? Math.min(10, c.freeze.durationS) : 0);
+const clipLen = (c: Clip) => Math.max(0.05, (c.outS - c.inS) / clipSpeed(c)) + freezeLen(c);
+/** atempo n'accepte que 0.5 à 2 : on enchaîne plusieurs étages pour x0.25 ou x4. */
+function atempoChain(speed: number): string {
+  const parts: string[] = [];
+  let s = speed;
+  while (s > 2) {
+    parts.push("atempo=2");
+    s /= 2;
+  }
+  while (s < 0.5) {
+    parts.push("atempo=0.5");
+    s *= 2;
+  }
+  if (Math.abs(s - 1) > 0.001) parts.push(`atempo=${s.toFixed(4)}`);
+  return parts.length ? "," + parts.join(",") : "";
+}
+const ffColor = (c: string | undefined, fallback: string) => {
+  const m = (c ?? "").trim().match(/^#?([0-9a-f]{6})$/i);
+  return m ? "0x" + m[1] : fallback;
+};
+export const STICKERS_DIR = path.join(PUBLIC_DIR, "stickers");
+fs.mkdirSync(STICKERS_DIR, { recursive: true });
+export function listStickers(): { file: string; url: string }[] {
+  return fs
+    .readdirSync(STICKERS_DIR)
+    .filter((f) => /\.(png|jpe?g|webp|gif)$/i.test(f))
+    .map((f) => ({ file: f, url: `/public/stickers/${encodeURIComponent(f)}` }));
+}
+export function saveSticker(data: Buffer, name: string): { file: string } {
+  const ext = (name.match(/\.(png|jpe?g|webp|gif)$/i)?.[1] ?? "png").toLowerCase();
+  const safe = name.replace(/\.[^.]+$/, "").replace(/[^\p{L}\p{N} _-]/gu, "").trim() || "sticker";
+  let file = `${safe}.${ext}`;
+  let n = 1;
+  while (fs.existsSync(path.join(STICKERS_DIR, file))) file = `${safe}-${++n}.${ext}`;
+  fs.writeFileSync(path.join(STICKERS_DIR, file), data);
+  return { file };
+}
+export function deleteSticker(file: string): boolean {
+  const p = path.join(STICKERS_DIR, path.basename(file));
+  if (!fs.existsSync(p)) return false;
+  fs.rmSync(p, { force: true });
+  return true;
+}
+/** Masque de forme : alpha via geq, puis fond noir (ou couleur de fond) derrière. */
+function maskFilter(mask: ClipMask | undefined, W: number, H: number, bg: string): string {
+  if (!mask || mask === "none") return "";
+  const cx = W / 2;
+  const cy = H / 2;
+  const r = Math.min(W, H) / 2;
+  let a = "";
+  if (mask === "circle") a = `if(lte((X-${cx})*(X-${cx})+(Y-${cy})*(Y-${cy}),${r * r}),255,0)`;
+  else if (mask === "rounded") {
+    const rr = Math.round(Math.min(W, H) * 0.12);
+    a = `if(lt(X,${rr})*lt(Y,${rr})*gt((X-${rr})*(X-${rr})+(Y-${rr})*(Y-${rr}),${rr * rr})+gt(X,${W - rr})*lt(Y,${rr})*gt((X-${W - rr})*(X-${W - rr})+(Y-${rr})*(Y-${rr}),${rr * rr})+lt(X,${rr})*gt(Y,${H - rr})*gt((X-${rr})*(X-${rr})+(Y-${H - rr})*(Y-${H - rr}),${rr * rr})+gt(X,${W - rr})*gt(Y,${H - rr})*gt((X-${W - rr})*(X-${W - rr})+(Y-${H - rr})*(Y-${H - rr}),${rr * rr}),0,255)`;
+  } else if (mask === "diamond") a = `if(lte(abs(X-${cx})/${cx}+abs(Y-${cy})/${cy},1),255,0)`;
+  else if (mask === "heart") {
+    // Cœur : équation (x²+y²-1)³ - x²y³ <= 0 sur un repère normalisé.
+    a = `if(lte(pow(pow((X-${cx})/${r * 0.75},2)+pow(-(Y-${cy * 0.9})/${r * 0.75},2)-1,3)-pow((X-${cx})/${r * 0.75},2)*pow(-(Y-${cy * 0.9})/${r * 0.75},3),0),255,0)`;
+  } else if (mask === "star") {
+    // Étoile à 5 branches : rayon polaire d'un bord droit entre une pointe (rayon r) et un creux (0,382 r).
+    const psi = `(PI/5-abs(mod(atan2(Y-${cy},X-${cx})+PI/2+4*PI,2*PI/5)-PI/5))`;
+    a = `if(lte(hypot(X-${cx},Y-${cy}),${r}*0.382*sin(PI/5)/(0.382*sin(PI/5-${psi})+sin(${psi}))),255,0)`;
+  }
+  if (!a) return "";
+  return `format=rgba,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='${a}',split[mk_a][mk_b];[mk_b]drawbox=c=${bg}:t=fill,format=rgba[mk_bg];[mk_bg][mk_a]overlay=format=auto,format=yuv420p`;
+}
 
 function effectFilters(effects: ClipEffect[], W: number, H: number, fps: number, len: number, i = 0): string[] {
   const f: string[] = [];
@@ -198,6 +297,18 @@ function effectFilters(effects: ClipEffect[], W: number, H: number, fps: number,
     if (e === "letterbox") f.push("drawbox=y=0:h=ih*0.1:w=iw:color=black:t=fill,drawbox=y=ih*0.9:h=ih*0.1:w=iw:color=black:t=fill");
     if (e === "flash") f.push("fade=t=in:st=0:d=0.25:color=white");
     if (e === "contrast-hard") f.push("eq=contrast=1.4:brightness=-0.03:saturation=0.9");
+    if (e === "teal-orange") f.push("colorbalance=rs=.18:gs=-.02:bs=-.18:rh=-.1:bh=.18:rm=.06:bm=-.06,eq=contrast=1.08:saturation=1.1");
+    if (e === "noir") f.push("hue=s=0,eq=contrast=1.35:brightness=-0.05:gamma=0.9,vignette=PI/4");
+    if (e === "pastel") f.push("eq=contrast=0.9:brightness=0.06:saturation=0.8,colorbalance=rs=.05:bs=.05");
+    if (e === "faded") f.push("curves=all='0/0.08 0.5/0.5 1/0.92',eq=saturation=0.75:contrast=0.95");
+    if (e === "vivid") f.push("eq=saturation=1.6:contrast=1.12");
+    if (e === "matte") f.push("curves=all='0/0.12 0.3/0.32 0.7/0.72 1/0.95',eq=saturation=0.9");
+    if (e === "neon") f.push("eq=saturation=1.8:contrast=1.2,hue=h=12,unsharp=5:5:0.8");
+    if (e === "old-film") f.push("hue=s=0.12,curves=vintage,noise=alls=22:allf=t+u,vignette=PI/4,eq=contrast=1.1");
+    if (e === "stabilize") f.push("deshake=rx=32:ry=32:edge=mirror");
+    if (e === "vhs") f.push(`eq=saturation=1.25:contrast=0.95,noise=alls=14:allf=t,chromashift=cbh=-6:crh=6,scale=iw*0.5:ih*0.5,scale=${W}:${H}:flags=bilinear`);
+    if (e === "rgb-split") f.push("chromashift=cbh=10:crh=-10:cbv=4:crv=-4");
+    if (e === "spin") f.push(`rotate=2*PI*t/${Math.max(0.5, len).toFixed(3)}:c=black`);
     if (e === "zoom-in") f.push(`zoompan=z='min(zoom+0.0012,1.25)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${W}x${H}:fps=${fps}`);
     if (e === "zoom-out") f.push(`zoompan=z='if(eq(on,1),1.25,max(zoom-0.0012,1.0))':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${W}x${H}:fps=${fps}`);
     if (e === "bw") f.push("hue=s=0");
@@ -224,19 +335,52 @@ async function buildGraph(req: MontageRequest, files: string[], audios: boolean[
   const music = req.music?.file && fs.existsSync(path.join(MUSIC_DIR, path.basename(req.music.file))) ? req.music : null;
   if (music) args.push("-stream_loop", "-1", "-i", path.join(MUSIC_DIR, path.basename(music.file)));
   const musicIndex = files.length;
+  let nextIndex = files.length + (music ? 1 : 0);
+  // Fonds des incrustations fond vert (une entrée vidéo par clip concerné, en boucle)
+  const chromaBg: (number | null)[] = [];
+  for (const c of req.clips) {
+    if (withVideo && c.chroma?.background) {
+      const f = await resolveSource(c.chroma.background);
+      args.push("-stream_loop", "-1", "-i", f);
+      chromaBg.push(nextIndex++);
+    } else chromaBg.push(null);
+  }
+  // Calques (stickers, images, vidéos incrustées)
+  const overlays = withVideo ? (req.overlays ?? []).filter((o) => o.end > o.start && o.w > 0) : [];
+  const overlayIndex: number[] = [];
+  for (const o of overlays) {
+    if (o.kind === "image") {
+      const f = path.join(STICKERS_DIR, path.basename(o.file ?? ""));
+      if (!fs.existsSync(f)) throw new Error("Sticker introuvable : " + o.file);
+      if (/\.gif$/i.test(f)) args.push("-ignore_loop", "0", "-i", f);
+      else args.push("-loop", "1", "-i", f);
+    } else {
+      if (!o.source) throw new Error("Calque vidéo sans source");
+      args.push("-i", await resolveSource(o.source));
+    }
+    overlayIndex.push(nextIndex++);
+  }
+  const padColor = ffColor(req.padColor, "black");
 
   const filters: string[] = [];
   const lens = req.clips.map(clipLen);
   req.clips.forEach((c, i) => {
-    const speed = Math.min(4, Math.max(0.25, c.speed ?? 1));
+    const speed = clipSpeed(c);
     const len = lens[i];
     const effects = c.effects ?? [];
+    const fz = freezeLen(c);
     if (withVideo) {
+      const pre: string[] = [];
+      if (c.rotate === 90) pre.push("transpose=1");
+      else if (c.rotate === 180) pre.push("hflip,vflip");
+      else if (c.rotate === 270) pre.push("transpose=2");
+      if (c.flipH) pre.push("hflip");
+      if (c.flipV) pre.push("vflip");
       let scale: string;
       if (effects.includes("blur-bg")) {
         scale = `split[bg${i}][fg${i}];[bg${i}]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},boxblur=20:2[bgb${i}];[fg${i}]scale=${W}:${H}:force_original_aspect_ratio=decrease[fgs${i}];[bgb${i}][fgs${i}]overlay=(W-w)/2:(H-h)/2`;
       } else if (req.fit === "contain") {
-        scale = `scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black`;
+        scale = `scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=${padColor}`;
       } else if (typeof c.cropX === "number") {
         // Recadrage centré sur les personnes détectées (cropX = centre horizontal 0..1).
         const cx = Math.max(0, Math.min(1, c.cropX)).toFixed(3);
@@ -244,13 +388,86 @@ async function buildGraph(req: MontageRequest, files: string[], audios: boolean[
       } else {
         scale = `scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H}`;
       }
-      const chain = [`trim=start=${c.inS}:end=${c.outS}`, `setpts=(PTS-STARTPTS)/${speed}`, scale, `fps=${fps}`, ...effectFilters(effects, W, H, fps, len, i), "format=yuv420p", "setsar=1"];
+      const post: string[] = [];
+      // Réglages image
+      const a = c.adjust;
+      if (a) {
+        const eq: string[] = [];
+        if (a.brightness) eq.push(`brightness=${Math.max(-1, Math.min(1, a.brightness)).toFixed(3)}`);
+        if (a.contrast !== undefined && Math.abs(a.contrast - 1) > 0.001) eq.push(`contrast=${Math.max(0, Math.min(3, a.contrast)).toFixed(3)}`);
+        if (a.saturation !== undefined && Math.abs(a.saturation - 1) > 0.001) eq.push(`saturation=${Math.max(0, Math.min(3, a.saturation)).toFixed(3)}`);
+        if (a.gamma !== undefined && Math.abs(a.gamma - 1) > 0.001) eq.push(`gamma=${Math.max(0.1, Math.min(10, a.gamma)).toFixed(3)}`);
+        if (eq.length) post.push("eq=" + eq.join(":"));
+        if (a.temperature) {
+          const t = Math.max(-1, Math.min(1, a.temperature));
+          post.push(`colorbalance=rs=${(t * 0.25).toFixed(3)}:bs=${(-t * 0.25).toFixed(3)}:rm=${(t * 0.12).toFixed(3)}:bm=${(-t * 0.12).toFixed(3)}`);
+        }
+        if (a.hue) post.push(`hue=h=${Math.max(-180, Math.min(180, a.hue)).toFixed(1)}`);
+        if (a.sharpen) post.push(`unsharp=5:5:${Math.max(-2, Math.min(3, a.sharpen)).toFixed(2)}:5:5:0`);
+      }
+      // Zoom animé (image clé début et fin, point d'intérêt x,y)
+      if (c.zoom && (Math.abs(c.zoom.start - 1) > 0.001 || Math.abs(c.zoom.end - 1) > 0.001)) {
+        const zs = Math.max(1, Math.min(4, c.zoom.start)).toFixed(3);
+        const ze = Math.max(1, Math.min(4, c.zoom.end)).toFixed(3);
+        const fx = Math.max(0, Math.min(1, c.zoom.x)).toFixed(3);
+        const fy = Math.max(0, Math.min(1, c.zoom.y)).toFixed(3);
+        const frames = Math.max(1, Math.round((len - fz) * fps));
+        post.push(`zoompan=z='${zs}+(${ze}-${zs})*min(on,${frames})/${frames}':x='(iw-iw/zoom)*${fx}':y='(ih-ih/zoom)*${fy}':d=1:s=${W}x${H}:fps=${fps}`);
+      }
+      // Fond vert : on retire la couleur puis on pose sur un fond (vidéo en boucle ou couleur)
+      let chroma = "";
+      if (c.chroma) {
+        const col = ffColor(c.chroma.color, "0x00FF00");
+        const sim = Math.max(0.01, Math.min(1, c.chroma.similarity || 0.3)).toFixed(3);
+        const bl = Math.max(0, Math.min(1, c.chroma.blend || 0.1)).toFixed(3);
+        const bgi = chromaBg[i];
+        const bgLabel = `[cbg${i}]`;
+        if (bgi !== null) filters.push(`[${bgi}:v]trim=duration=${len.toFixed(3)},setpts=PTS-STARTPTS,scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},fps=${fps}${bgLabel}`);
+        else filters.push(`color=c=${ffColor(c.chroma.bgColor, "black")}:s=${W}x${H}:r=${fps}:d=${len.toFixed(3)}${bgLabel}`);
+        chroma = `format=yuva420p,chromakey=${col}:${sim}:${bl}[ck${i}];${bgLabel}[ck${i}]overlay=shortest=1:format=auto`;
+      }
+      if (a?.opacity !== undefined && a.opacity < 0.999) {
+        post.push(`format=rgba,colorchannelmixer=aa=${Math.max(0, Math.min(1, a.opacity)).toFixed(3)},split[op${i}a][op${i}b];[op${i}b]drawbox=c=black:t=fill,format=rgba[op${i}bg];[op${i}bg][op${i}a]overlay=format=auto`);
+      }
+      const mask = maskFilter(c.mask, W, H, padColor).replace(/mk_/g, `mk${i}_`);
+      const freeze = fz > 0 ? (c.freeze!.at === "end" ? `tpad=stop_mode=clone:stop_duration=${fz.toFixed(3)}` : `tpad=start_mode=clone:start_duration=${fz.toFixed(3)}`) : "";
+      const chain = [
+        `trim=start=${c.inS}:end=${c.outS}`,
+        `setpts=(PTS-STARTPTS)/${speed}`,
+        ...(c.reverse ? ["reverse"] : []),
+        ...pre,
+        scale,
+        `fps=${fps}`,
+        ...(chroma ? [chroma] : []),
+        ...post,
+        ...(mask ? [mask] : []),
+        ...effectFilters(effects, W, H, fps, len - fz, i),
+        ...(freeze ? [freeze] : []),
+        "format=yuv420p",
+        "setsar=1",
+      ];
       filters.push(`[${i}:v]${chain.join(",")}[v${i}]`);
     }
     if (audios[i] && !c.mute) {
       const vol = Math.max(0, c.volume ?? 1);
-      const tempo = speed === 1 ? "" : `,atempo=${Math.min(2, Math.max(0.5, speed))}`;
-      filters.push(`[${i}:a]atrim=start=${c.inS}:end=${c.outS},asetpts=PTS-STARTPTS${tempo},volume=${vol},aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo[a${i}]`);
+      const au = c.audio ?? {};
+      const extra: string[] = [];
+      if (c.reverse) extra.push("areverse");
+      if (au.denoise) extra.push("afftdn=nf=-25");
+      if (au.pitch) {
+        const st = Math.max(-12, Math.min(12, au.pitch));
+        const ratio = Math.pow(2, st / 12);
+        extra.push(`asetrate=48000*${ratio.toFixed(5)},aresample=48000${atempoChain(1 / ratio)}`);
+      }
+      if (au.bass) extra.push(`bass=g=${Math.max(-20, Math.min(20, au.bass)).toFixed(1)}`);
+      if (au.treble) extra.push(`treble=g=${Math.max(-20, Math.min(20, au.treble)).toFixed(1)}`);
+      if (au.boost) extra.push("acompressor=threshold=0.08:ratio=4:attack=5:release=120:makeup=3,alimiter=limit=0.95");
+      if (au.echo) extra.push("aecho=0.8:0.5:70:0.3");
+      const bodyLen = len - fz;
+      if (au.fadeInS && au.fadeInS > 0) extra.push(`afade=t=in:st=0:d=${Math.min(bodyLen, au.fadeInS).toFixed(3)}`);
+      if (au.fadeOutS && au.fadeOutS > 0) extra.push(`afade=t=out:st=${Math.max(0, bodyLen - au.fadeOutS).toFixed(3)}:d=${Math.min(bodyLen, au.fadeOutS).toFixed(3)}`);
+      if (fz > 0) extra.push(c.freeze!.at === "end" ? `apad=pad_dur=${fz.toFixed(3)}` : `adelay=${Math.round(fz * 1000)}|${Math.round(fz * 1000)}`);
+      filters.push(`[${i}:a]aresample=48000,atrim=start=${c.inS}:end=${c.outS},asetpts=PTS-STARTPTS${atempoChain(speed)},volume=${vol}${extra.length ? "," + extra.join(",") : ""},aformat=sample_fmts=fltp:channel_layouts=stereo,atrim=duration=${len.toFixed(3)}[a${i}]`);
     } else {
       filters.push(`anullsrc=r=48000:cl=stereo,aformat=sample_fmts=fltp,atrim=duration=${len.toFixed(3)}[a${i}]`);
     }
@@ -294,6 +511,34 @@ async function buildGraph(req: MontageRequest, files: string[], audios: boolean[
     if (fade > 0 && total > fade * 2) {
       filters.push(`[vcat]fade=t=in:st=0:d=${fade},fade=t=out:st=${(total - fade).toFixed(3)}:d=${fade}[vf]`);
       vOut = "[vf]";
+    }
+    overlays.forEach((o, k) => {
+      const idx = overlayIndex[k];
+      const ow = Math.max(8, Math.round((Math.min(1, o.w) * W) / 2) * 2);
+      const st = Math.max(0, o.start).toFixed(3);
+      const en = Math.min(total, o.end).toFixed(3);
+      const op = Math.max(0, Math.min(1, o.opacity ?? 1));
+      const parts = [o.kind === "video" ? `trim=duration=${(o.end - o.start).toFixed(3)},setpts=PTS-STARTPTS+${st}/TB` : `setpts=PTS-STARTPTS+${st}/TB`, `scale=${ow}:-2`, "format=rgba"];
+      if (o.rotate) parts.push(`rotate=${((o.rotate * Math.PI) / 180).toFixed(4)}:c=none:ow=rotw(iw):oh=roth(ih)`);
+      if (o.shape === "circle") parts.push(`geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='if(lte((X-W/2)*(X-W/2)+(Y-H/2)*(Y-H/2),(min(W,H)/2)*(min(W,H)/2)),alpha(X,Y),0)'`);
+      else if (o.shape === "rounded") parts.push(`geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='if(lt(X,W*0.12)*lt(Y,W*0.12)*gt((X-W*0.12)*(X-W*0.12)+(Y-W*0.12)*(Y-W*0.12),W*W*0.0144)+gt(X,W-W*0.12)*lt(Y,W*0.12)*gt((X-W+W*0.12)*(X-W+W*0.12)+(Y-W*0.12)*(Y-W*0.12),W*W*0.0144)+lt(X,W*0.12)*gt(Y,H-W*0.12)*gt((X-W*0.12)*(X-W*0.12)+(Y-H+W*0.12)*(Y-H+W*0.12),W*W*0.0144)+gt(X,W-W*0.12)*gt(Y,H-W*0.12)*gt((X-W+W*0.12)*(X-W+W*0.12)+(Y-H+W*0.12)*(Y-H+W*0.12),W*W*0.0144),0,alpha(X,Y))'`);
+      if (op < 0.999) parts.push(`colorchannelmixer=aa=${op.toFixed(3)}`);
+      filters.push(`[${idx}:v]${parts.join(",")}[ov${k}]`);
+      const outLabel = `[vo${k}]`;
+      filters.push(`${vOut}[ov${k}]overlay=x=${Math.round(Math.max(0, Math.min(1, o.x)) * W)}:y=${Math.round(Math.max(0, Math.min(1, o.y)) * H)}:enable='between(t,${st},${en})':eof_action=pass:format=auto${outLabel}`);
+      vOut = outLabel;
+    });
+    // Son des calques vidéo (PiP) mixé à la bande son, sauf si coupé
+    const withSound = overlays.map((o, k) => ({ o, k })).filter(({ o }) => o.kind === "video" && !o.mute);
+    if (withSound.length) {
+      const labels: string[] = [];
+      for (const { o, k } of withSound) {
+        const d = Math.max(0.05, o.end - o.start).toFixed(3);
+        filters.push(`[${overlayIndex[k]}:a]aresample=48000,atrim=duration=${d},asetpts=PTS-STARTPTS,adelay=${Math.round(o.start * 1000)}|${Math.round(o.start * 1000)},aformat=sample_fmts=fltp:channel_layouts=stereo[oa${k}]`);
+        labels.push(`[oa${k}]`);
+      }
+      filters.push(`${aOut}${labels.join("")}amix=inputs=${labels.length + 1}:duration=first:dropout_transition=0:normalize=0[aov]`);
+      aOut = "[aov]";
     }
   }
   if (music) {

@@ -10,6 +10,7 @@ import {
   type MontageRequest,
   type MontageSources,
   type MusicTrack,
+  type Overlay,
   type Project,
   type PublishSource,
   type SubtitleStyle,
@@ -17,6 +18,8 @@ import {
 } from "../api";
 import { Field, inputCls } from "./Modal";
 import { PublishPanel } from "./PublishPanel";
+import { ClipTools, type ClipToolsValue } from "./ClipTools";
+import { LayersTool } from "./LayersTool";
 import { takePending } from "../montageQueue";
 
 type TClip = {
@@ -32,7 +35,7 @@ type TClip = {
   speed: number;
   effects: ClipEffect[];
   smartCrop?: boolean;
-};
+} & Omit<ClipToolsValue, "speed" | "mute">;
 
 const PRESETS = [
   { label: "1080x1920 (9:16)", w: 1080, h: 1920 },
@@ -60,6 +63,16 @@ const EFFECT_GROUPS: { title: string; items: { key: ClipEffect; label: string }[
       { key: "sharpen", label: "Netteté" },
       { key: "blur", label: "Flou" },
       { key: "pixelate", label: "Pixels" },
+      { key: "teal-orange", label: "Teal et orange" },
+      { key: "noir", label: "Film noir" },
+      { key: "pastel", label: "Pastel" },
+      { key: "faded", label: "Délavé" },
+      { key: "vivid", label: "Couleurs vives" },
+      { key: "matte", label: "Mat" },
+      { key: "neon", label: "Néon" },
+      { key: "old-film", label: "Vieux film" },
+      { key: "vhs", label: "VHS" },
+      { key: "rgb-split", label: "Décalage RVB" },
     ],
   },
   {
@@ -71,6 +84,8 @@ const EFFECT_GROUPS: { title: string; items: { key: ClipEffect; label: string }[
       { key: "mirror", label: "Miroir" },
       { key: "letterbox", label: "Bandes cinéma" },
       { key: "blur-bg", label: "Fond flou (vidéo horizontale)" },
+      { key: "stabilize", label: "Stabiliser" },
+      { key: "spin", label: "Rotation continue" },
     ],
   },
   {
@@ -95,6 +110,35 @@ const TRANSITIONS = [
   ["radial", "Radial"],
   ["smoothleft", "Balayage doux"],
   ["zoomin", "Zoom"],
+  ["fadewhite", "Fondu au blanc"],
+  ["fadegrays", "Fondu gris"],
+  ["dissolve", "Dissolution"],
+  ["slideright", "Glissement droite"],
+  ["slidedown", "Glissement bas"],
+  ["wiperight", "Volet droite"],
+  ["wipeup", "Volet haut"],
+  ["wipedown", "Volet bas"],
+  ["wipetl", "Volet diagonal"],
+  ["circleclose", "Cercle fermé"],
+  ["circlecrop", "Cercle recadré"],
+  ["rectcrop", "Rectangle recadré"],
+  ["distance", "Distance"],
+  ["smoothright", "Balayage doux droite"],
+  ["smoothup", "Balayage doux haut"],
+  ["horzopen", "Ouverture horizontale"],
+  ["vertopen", "Ouverture verticale"],
+  ["horzclose", "Fermeture horizontale"],
+  ["diagtl", "Diagonale"],
+  ["hlslice", "Lamelles horizontales"],
+  ["vuslice", "Lamelles verticales"],
+  ["hblur", "Flou horizontal"],
+  ["squeezeh", "Écrasement horizontal"],
+  ["squeezev", "Écrasement vertical"],
+  ["hlwind", "Vent"],
+  ["coverleft", "Recouvrement gauche"],
+  ["revealleft", "Révélation gauche"],
+  ["fadefast", "Fondu rapide"],
+  ["fadeslow", "Fondu lent"],
 ];
 
 const DEFAULT_STYLE: SubtitleStyle = { mode: "karaoke", position: "bottom", size: 84, font: "Anton", color: "#ffffff", highlight: "#facc15", outline: "#000000", box: false, uppercase: true, maxWords: 4, animation: "pop", emojis: false };
@@ -179,7 +223,7 @@ const TEMPLATES: Template[] = [
 ];
 
 const uid = () => Math.random().toString(36).slice(2, 9);
-const clipLen = (c: TClip) => (c.outS - c.inS) / c.speed;
+const clipLen = (c: TClip) => (c.outS - c.inS) / c.speed + (c.freeze && c.freeze.durationS > 0 ? Math.min(10, c.freeze.durationS) : 0);
 const fmtS = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`;
 
 function probeDuration(url: string): Promise<number> {
@@ -210,7 +254,9 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
   const [transition, setTransition] = useState({ type: "none", durationS: 0.4 });
   const [fade, setFade] = useState(0.3);
   const [name, setName] = useState("");
-  const [tool, setTool] = useState<"clip" | "music" | "subs" | "texts" | "export">("clip");
+  const [tool, setTool] = useState<"clip" | "music" | "subs" | "texts" | "layers" | "export">("clip");
+  const [overlays, setOverlays] = useState<Overlay[]>([]);
+  const [padColor, setPadColor] = useState("#000000");
   // Musique
   const [music, setMusic] = useState<MusicTrack[]>([]);
   const [musicSel, setMusicSel] = useState("");
@@ -471,11 +517,13 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
   };
 
   // ---- Annuler / rétablir et sauvegarde automatique ----------------------------
-  const snapshot = () => JSON.stringify({ clips, cues, texts, style, out, fit, transition, fade, musicSel, musicOpts, name, cover });
+  const snapshot = () => JSON.stringify({ clips, cues, texts, style, out, fit, transition, fade, musicSel, musicOpts, name, cover, overlays, padColor });
   const restore = (json: string) => {
     restoringRef.current = true;
     try {
-      const st = JSON.parse(json) as { clips: TClip[]; cues: Cue[]; texts: TextItem[]; style: SubtitleStyle; out: { w: number; h: number }; fit: "cover" | "contain"; transition: { type: string; durationS: number }; fade: number; musicSel: string; musicOpts: typeof musicOpts; name: string; cover: typeof cover };
+      const st = JSON.parse(json) as { clips: TClip[]; cues: Cue[]; texts: TextItem[]; style: SubtitleStyle; out: { w: number; h: number }; fit: "cover" | "contain"; transition: { type: string; durationS: number }; fade: number; musicSel: string; musicOpts: typeof musicOpts; name: string; cover: typeof cover; overlays?: Overlay[]; padColor?: string };
+      setOverlays(st.overlays ?? []);
+      setPadColor(st.padColor ?? "#000000");
       setClips(st.clips ?? []);
       setCues(st.cues ?? []);
       setTexts(st.texts ?? []);
@@ -510,7 +558,7 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
     }, 500);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clips, cues, texts, style, out, fit, transition, fade, musicSel, musicOpts, name, cover]);
+  }, [clips, cues, texts, style, out, fit, transition, fade, musicSel, musicOpts, name, cover, overlays, padColor]);
   const undo = () => {
     const h = historyRef.current;
     const prev = h.past.pop();
@@ -640,7 +688,26 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
 
   const request = (): MontageRequest => ({
     name: name || undefined,
-    clips: clips.map((c) => ({ source: c.source, inS: c.inS, outS: c.outS, mute: c.mute, volume: c.volume, speed: c.speed, effects: c.effects, smartCrop: c.smartCrop })),
+    clips: clips.map((c) => ({
+      source: c.source,
+      inS: c.inS,
+      outS: c.outS,
+      mute: c.mute,
+      volume: c.volume,
+      speed: c.speed,
+      effects: c.effects,
+      smartCrop: c.smartCrop,
+      reverse: c.reverse,
+      rotate: c.rotate,
+      flipH: c.flipH,
+      flipV: c.flipV,
+      adjust: c.adjust ?? null,
+      zoom: c.zoom ?? null,
+      freeze: c.freeze ?? null,
+      audio: c.audio ?? null,
+      chroma: c.chroma ?? null,
+      mask: c.mask ?? "none",
+    })),
     width: out.w,
     height: out.h,
     fit,
@@ -650,6 +717,8 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
     subtitles: cues.length ? { cues, style } : null,
     texts,
     cover: cover.on ? { atS: cover.atS, title: cover.title } : null,
+    overlays,
+    padColor,
   });
 
   const exportNow = async () => {
@@ -727,13 +796,20 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
   // Aperçu des sous-titres et textes au temps courant.
   const activeCue = cues.find((c) => head >= c.start && head <= c.end);
   const activeTexts = texts.filter((t) => head >= t.start && head <= t.end);
+  const activeOverlays = overlays.filter((o) => head >= o.start && head <= o.end);
+  const stickerUrl = (file?: string) => `/public/stickers/${encodeURIComponent(file ?? "")}`;
+  const pipSources: { label: string; source: ClipSource; durationS: number | null }[] = [
+    ...(sources?.videos ?? []).map((v) => ({ label: v.name, source: { kind: "video" as const, id: v.id }, durationS: v.durationS })),
+    ...(sources?.captures ?? []).map((c) => ({ label: `Enregistrement : ${c.name}`, source: { kind: "capture" as const, id: c.id }, durationS: c.durationS as number | null })),
+    ...(sources?.renders ?? []).map((r) => ({ label: r.name, source: { kind: "render" as const, id: r.id }, durationS: null as number | null })),
+  ];
   const previewScale = 420 / 1920;
 
   // Aperçu en direct des effets du clip courant (approximation CSS de ce que fera l'export).
   const live = (() => {
     const loc = locate(head);
     const c = loc ? clips[loc.index] : null;
-    if (!c) return { filter: "", transform: "", opacity: 1, vignette: false, letterbox: false, pixelate: false };
+    if (!c) return { filter: "", transform: "", opacity: 1, vignette: false, letterbox: false, pixelate: false, clipPath: "", borderRadius: "" };
     const span = Math.max(0.05, c.outS - c.inS);
     const p = Math.max(0, Math.min(1, (loc!.local - c.inS) / span));
     const local = loc!.local - c.inS;
@@ -762,8 +838,47 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
       if (e === "fade-in" && local < 0.35) opacity = Math.min(opacity, local / 0.35);
       if (e === "fade-out" && remaining < 0.35) opacity = Math.min(opacity, Math.max(0, remaining / 0.35));
     }
+    for (const e of c.effects) {
+      if (e === "teal-orange") f.push("contrast(1.08) saturate(1.1) sepia(.15) hue-rotate(-10deg)");
+      if (e === "noir") f.push("grayscale(1) contrast(1.35) brightness(.95)");
+      if (e === "pastel") f.push("contrast(.9) brightness(1.06) saturate(.8)");
+      if (e === "faded") f.push("contrast(.85) saturate(.75) brightness(1.04)");
+      if (e === "vivid") f.push("saturate(1.6) contrast(1.12)");
+      if (e === "matte") f.push("contrast(.88) saturate(.9) brightness(1.05)");
+      if (e === "neon") f.push("saturate(1.8) contrast(1.2) hue-rotate(12deg)");
+      if (e === "old-film") f.push("grayscale(.88) sepia(.3) contrast(1.1)");
+      if (e === "vhs") f.push("saturate(1.25) contrast(.95) blur(0.7px)");
+      if (e === "spin") transform += ` rotate(${((local / Math.max(0.5, span / c.speed)) * 360).toFixed(1)}deg)`;
+    }
+    const adj = c.adjust;
+    if (adj) {
+      if (adj.brightness) f.push(`brightness(${(1 + adj.brightness).toFixed(3)})`);
+      if (adj.contrast !== undefined && adj.contrast !== 1) f.push(`contrast(${adj.contrast.toFixed(3)})`);
+      if (adj.saturation !== undefined && adj.saturation !== 1) f.push(`saturate(${adj.saturation.toFixed(3)})`);
+      if (adj.gamma !== undefined && adj.gamma !== 1) f.push(`brightness(${Math.pow(adj.gamma, 0.5).toFixed(3)})`);
+      if (adj.temperature) f.push(adj.temperature > 0 ? `sepia(${(adj.temperature * 0.5).toFixed(3)}) saturate(${(1 + adj.temperature * 0.3).toFixed(3)})` : `hue-rotate(${(adj.temperature * 25).toFixed(1)}deg) saturate(${(1 + adj.temperature * 0.15).toFixed(3)})`);
+      if (adj.hue) f.push(`hue-rotate(${adj.hue}deg)`);
+      if (adj.sharpen && adj.sharpen > 0) f.push(`contrast(${(1 + adj.sharpen * 0.05).toFixed(3)})`);
+      if (adj.opacity !== undefined && adj.opacity < 1) opacity = Math.min(opacity, adj.opacity);
+    }
+    if (c.rotate) transform += ` rotate(${c.rotate}deg)`;
+    if (c.flipH) transform += " scaleX(-1)";
+    if (c.flipV) transform += " scaleY(-1)";
+    if (c.zoom && (c.zoom.start !== 1 || c.zoom.end !== 1)) {
+      const zz = c.zoom.start + (c.zoom.end - c.zoom.start) * p;
+      const tx = (0.5 - c.zoom.x) * (zz - 1) * 100;
+      const ty = (0.5 - c.zoom.y) * (zz - 1) * 100;
+      transform += ` translate(${tx.toFixed(2)}%, ${ty.toFixed(2)}%) scale(${zz.toFixed(3)})`;
+    }
+    let clipPath = "";
+    let borderRadius = "";
+    if (c.mask === "circle") clipPath = "circle(50% at 50% 50%)";
+    else if (c.mask === "rounded") borderRadius = "12%";
+    else if (c.mask === "diamond") clipPath = "polygon(50% 0, 100% 50%, 50% 100%, 0 50%)";
+    else if (c.mask === "star") clipPath = "polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)";
+    else if (c.mask === "heart") clipPath = "polygon(50% 95%, 15% 60%, 5% 40%, 10% 20%, 25% 10%, 40% 15%, 50% 28%, 60% 15%, 75% 10%, 90% 20%, 95% 40%, 85% 60%)";
     const flash = c.effects.includes("flash") && local < 0.25 ? 1 - local / 0.25 : 0;
-    return { filter: f.join(" "), transform: transform.trim(), opacity, flash, vignette: c.effects.includes("vignette"), letterbox: c.effects.includes("letterbox"), pixelate: c.effects.includes("pixelate") };
+    return { filter: f.join(" "), transform: transform.trim(), opacity, flash, vignette: c.effects.includes("vignette"), letterbox: c.effects.includes("letterbox"), pixelate: c.effects.includes("pixelate"), clipPath, borderRadius };
   })();
 
   type LibItem = { id: string; name: string; durationS: number | null; cover: string | null; url: string; views?: number; postedAt?: number | null };
@@ -905,8 +1020,27 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
               ref={videoRef}
               playsInline
               className="h-full w-full rounded-xl"
-              style={{ objectFit: fit, filter: live.filter || undefined, transform: live.transform || undefined, opacity: live.opacity, imageRendering: live.pixelate ? "pixelated" : undefined }}
+              style={{ objectFit: fit, filter: live.filter || undefined, transform: live.transform || undefined, opacity: live.opacity, imageRendering: live.pixelate ? "pixelated" : undefined, clipPath: live.clipPath || undefined, borderRadius: live.borderRadius || undefined, backgroundColor: fit === "contain" ? padColor : undefined }}
             />
+            {activeOverlays.map((o) =>
+              o.kind === "image" ? (
+                <img
+                  key={o.id}
+                  src={stickerUrl(o.file)}
+                  alt=""
+                  className="pointer-events-none absolute"
+                  style={{ left: `${o.x * 100}%`, top: `${o.y * 100}%`, width: `${o.w * 100}%`, opacity: o.opacity ?? 1, transform: o.rotate ? `rotate(${o.rotate}deg)` : undefined, borderRadius: o.shape === "circle" ? "50%" : o.shape === "rounded" ? "12%" : undefined, aspectRatio: o.shape === "circle" ? "1" : undefined, objectFit: o.shape === "circle" ? "cover" : undefined }}
+                />
+              ) : (
+                <div
+                  key={o.id}
+                  className="pointer-events-none absolute grid place-items-center border border-dashed border-green-400/70 bg-black/40 text-[10px] text-green-200"
+                  style={{ left: `${o.x * 100}%`, top: `${o.y * 100}%`, width: `${o.w * 100}%`, aspectRatio: o.shape === "circle" ? "1" : "9 / 16", opacity: o.opacity ?? 1, borderRadius: o.shape === "circle" ? "50%" : o.shape === "rounded" ? "12%" : undefined }}
+                >
+                  vidéo incrustée (export)
+                </div>
+              ),
+            )}
             {live.vignette ? <div className="pointer-events-none absolute inset-0 rounded-xl" style={{ background: "radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,0.75) 100%)" }} /> : null}
             {live.letterbox ? (
               <>
@@ -983,6 +1117,7 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
               {toolBtn("music", "🎵 Musique")}
               {toolBtn("subs", "💬 Sous-titres")}
               {toolBtn("texts", "🔤 Textes")}
+              {toolBtn("layers", `🧩 Calques${overlays.length ? ` (${overlays.length})` : ""}`)}
               {toolBtn("export", "📤 Export")}
             </div>
             <div className="scrollbar-thin max-h-[380px] overflow-y-auto rounded-xl border border-zinc-800 p-3 text-sm">
@@ -999,7 +1134,7 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
                       </Field>
                       <Field label="Vitesse">
                         <select value={selected.speed} onChange={(e) => update(selected.uid, { speed: Number(e.target.value) })} className={inputCls}>
-                          {[0.5, 0.75, 1, 1.25, 1.5, 2].map((s) => <option key={s} value={s}>x{s}</option>)}
+                          {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4].map((s) => <option key={s} value={s}>x{s}</option>)}
                         </select>
                       </Field>
                       <Field label={`Volume ${Math.round(selected.volume * 100)} %`}>
@@ -1030,6 +1165,7 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
                         </div>
                       ))}
                     </div>
+                    <ClipTools clip={selected} update={(patch) => update(selected.uid, patch)} sources={pipSources.map((p) => ({ label: p.label, source: p.source }))} />
                     <div className="text-xs text-zinc-500">Dans le montage : de {fmtS(selStart)} à {fmtS(selStart + clipLen(selected))}.</div>
                   </div>
                 ) : (
@@ -1148,6 +1284,8 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
                 </div>
               ) : null}
 
+              {tool === "layers" ? <LayersTool overlays={overlays} setOverlays={(f) => setOverlays(f)} head={head} total={total} videoSources={pipSources} notify={notify} /> : null}
+
               {tool === "texts" ? (
                 <div className="space-y-2">
                   <button onClick={addText} className="rounded-lg bg-green-500 px-3 py-1.5 text-xs font-semibold text-black hover:bg-green-400">+ Texte au curseur</button>
@@ -1197,6 +1335,7 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
                       </select>
                     </Field>
                     <Field label="Fondu début et fin (s)"><input type="number" step="0.1" min={0} max={5} value={fade} onChange={(e) => setFade(Number(e.target.value))} className={inputCls} /></Field>
+                    {fit === "contain" ? <Field label="Couleur des bandes"><input type="color" value={padColor} onChange={(e) => setPadColor(e.target.value)} className="h-9 w-full" /></Field> : null}
                     <Field label="Transition entre clips">
                       <select value={transition.type} onChange={(e) => setTransition({ ...transition, type: e.target.value })} className={inputCls}>
                         {TRANSITIONS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}

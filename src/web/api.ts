@@ -80,8 +80,36 @@ export type Capture = { id: string; name: string; file: string; url: string; dur
 export type ClipSource = { kind: "video" | "capture" | "render"; id: string };
 export type ClipEffect =
   | "zoom-in" | "zoom-out" | "bw" | "warm" | "cold" | "vignette" | "mirror" | "sharpen" | "punch" | "fade-in" | "fade-out" | "blur-bg"
-  | "sepia" | "vintage" | "cinematic" | "glow" | "blur" | "pixelate" | "invert" | "shake" | "letterbox" | "flash" | "dream" | "contrast-hard";
-export type Clip = { source: ClipSource; inS: number; outS: number; mute?: boolean; volume?: number; speed?: number; effects?: ClipEffect[]; smartCrop?: boolean };
+  | "sepia" | "vintage" | "cinematic" | "glow" | "blur" | "pixelate" | "invert" | "shake" | "letterbox" | "flash" | "dream" | "contrast-hard"
+  | "teal-orange" | "noir" | "pastel" | "faded" | "vivid" | "matte" | "neon" | "old-film" | "stabilize" | "vhs" | "rgb-split" | "spin";
+export type ClipAdjust = { brightness?: number; contrast?: number; saturation?: number; gamma?: number; temperature?: number; hue?: number; sharpen?: number; opacity?: number };
+export type ClipZoom = { start: number; end: number; x: number; y: number };
+export type ClipFreeze = { at: "start" | "end"; durationS: number };
+export type ClipAudio = { fadeInS?: number; fadeOutS?: number; denoise?: boolean; pitch?: number; boost?: boolean; bass?: number; treble?: number; echo?: boolean };
+export type ClipChroma = { color: string; similarity: number; blend: number; bgColor?: string; background?: ClipSource | null };
+export type ClipMask = "none" | "circle" | "rounded" | "heart" | "star" | "diamond";
+export type Clip = {
+  source: ClipSource;
+  inS: number;
+  outS: number;
+  mute?: boolean;
+  volume?: number;
+  speed?: number;
+  effects?: ClipEffect[];
+  smartCrop?: boolean;
+  reverse?: boolean;
+  rotate?: 0 | 90 | 180 | 270;
+  flipH?: boolean;
+  flipV?: boolean;
+  adjust?: ClipAdjust | null;
+  zoom?: ClipZoom | null;
+  freeze?: ClipFreeze | null;
+  audio?: ClipAudio | null;
+  chroma?: ClipChroma | null;
+  mask?: ClipMask;
+};
+export type Overlay = { id: string; kind: "image" | "video"; file?: string; source?: ClipSource; x: number; y: number; w: number; start: number; end: number; opacity?: number; rotate?: number; mute?: boolean; shape?: "rect" | "circle" | "rounded" };
+export type Sticker = { file: string; url: string };
 export type Word = { text: string; start: number; end: number };
 export type Cue = { id: string; start: number; end: number; text: string; words: Word[] };
 export type SubtitleStyle = {
@@ -115,6 +143,8 @@ export type MontageRequest = {
   subtitles?: { cues: Cue[]; style: Partial<SubtitleStyle> } | null;
   texts?: TextItem[];
   cover?: { atS: number; title: string } | null;
+  overlays?: Overlay[];
+  padColor?: string;
 };
 export type MontageSources = {
   videos: { id: string; name: string; handle: string; durationS: number | null; cover: string | null; url: string; views: number; postedAt: number | null; favorite: boolean; followed: boolean }[];
@@ -296,6 +326,14 @@ export const api = {
     return body as { file: string };
   },
   deleteMusic: (file: string) => req<{ ok: boolean }>(`/api/music/${encodeURIComponent(file)}`, { method: "DELETE" }),
+  stickers: () => req<Sticker[]>("/api/stickers"),
+  uploadSticker: async (blob: Blob, name: string) => {
+    const r = await fetch(`/api/stickers?name=${encodeURIComponent(name)}`, { method: "POST", headers: { "Content-Type": blob.type || "application/octet-stream" }, body: blob });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error((body as { error?: string }).error ?? `Erreur ${r.status}`);
+    return body as { file: string };
+  },
+  deleteSticker: (file: string) => req<{ ok: boolean }>(`/api/stickers/${encodeURIComponent(file)}`, { method: "DELETE" }),
   extractMusic: (source: ClipSource, name: string, inS?: number, outS?: number) => req<{ file: string }>("/api/music/extract", { method: "POST", body: JSON.stringify({ source, name, inS, outS }) }),
   transcribeMontage: (montage: MontageRequest, language?: string) => req<{ cues: Cue[]; provider: string; language?: string }>("/api/montage/transcribe", { method: "POST", body: JSON.stringify({ montage, language }) }),
   alerts: () => req<Alert[]>("/api/alerts"),
