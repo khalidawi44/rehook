@@ -69,8 +69,11 @@ export const SettingsModal: React.FC<{ stats: Stats | null; onClose: () => void;
           <Field label="Viral : x médiane du compte">
             <input type="number" step="0.5" value={s.viralOutlierFactor} onChange={num("viralOutlierFactor")} className={inputCls} />
           </Field>
-          <Field label="Vidéos par source">
+          <Field label="Vidéos par hashtag ou recherche">
             <input type="number" value={s.videosPerSource} onChange={num("videosPerSource")} className={inputCls} />
+          </Field>
+          <Field label="Vidéos par compte suivi" hint="Toutes les vidéos récentes du compte, sans filtre de viralité (onglet 👥 Suivis).">
+            <input type="number" value={s.videosPerAccount} onChange={num("videosPerAccount")} className={inputCls} />
           </Field>
         </div>
         <label className="flex items-start gap-2 rounded-xl border border-zinc-800 p-3 text-sm">

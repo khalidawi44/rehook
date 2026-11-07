@@ -231,6 +231,7 @@ export type Settings = {
   alertMinViews: number;
   alertMinViewsPerHour: number;
   videosPerSource: number;
+  videosPerAccount: number;
   language: string;
   packLoaded: string;
   feedEnabled: boolean;
@@ -304,7 +305,7 @@ export const api = {
   video: (id: number) => req<VideoCard & { snapshots: Snapshot[] }>(`/api/videos/${id}`),
   favorite: (id: number) => req<{ favorite: boolean }>(`/api/videos/${id}/favorite`, { method: "POST" }),
   deleteVideo: (id: number) => req<{ ok: boolean }>(`/api/videos/${id}`, { method: "DELETE" }),
-  import: (text: string) => req<{ ok: number; errors: string[] }>("/api/import", { method: "POST", body: JSON.stringify({ text }) }),
+  import: (text: string) => req<{ ok: number; errors: string[]; ids: number[] }>("/api/import", { method: "POST", body: JSON.stringify({ text }) }),
   refresh: () => req<{ started: boolean }>("/api/refresh", { method: "POST", body: "{}" }),
   accounts: () => req<Account[]>("/api/accounts"),
   addAccount: (handle: string) => req<Account>("/api/accounts", { method: "POST", body: JSON.stringify({ handle }) }),

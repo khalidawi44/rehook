@@ -15,7 +15,7 @@ import { AccountsPanel } from "./components/AccountsPanel";
 import { SettingsModal } from "./components/SettingsModal";
 import { ImportModal } from "./components/ImportModal";
 
-type Tab = "feed" | "viral" | "all" | "saved" | "accounts" | "jobs" | "alerts" | "recorder" | "montage" | "planning";
+type Tab = "feed" | "viral" | "all" | "saved" | "followed" | "accounts" | "jobs" | "alerts" | "recorder" | "montage" | "planning";
 
 const PERIODS = [
   { k: "24h", l: "24 h" },
@@ -31,6 +31,17 @@ export const App: React.FC = () => {
   const [sort, setSort] = useState("views");
   const [unfollowed, setUnfollowed] = useState(true);
   const [favOnly, setFavOnly] = useState(false);
+  const [accountId, setAccountId] = useState<number | null>(null);
+  const [followedAccounts, setFollowedAccounts] = useState<{ id: number; handle: string; avatar_url: string | null; videos: number }[]>([]);
+  useEffect(() => {
+    const h = (e: Event) => {
+      const id = (e as CustomEvent<number | null>).detail ?? null;
+      setAccountId(id);
+      setTab("followed");
+    };
+    window.addEventListener("niche:goto-followed", h);
+    return () => window.removeEventListener("niche:goto-followed", h);
+  }, []);
   const [q, setQ] = useState("");
   const [stats, setStats] = useState<Stats | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
@@ -141,17 +152,22 @@ export const App: React.FC = () => {
   };
 
   const loadVideos = useCallback(() => {
-    if (tab !== "viral" && tab !== "all" && tab !== "saved") return;
+    if (tab !== "viral" && tab !== "all" && tab !== "saved" && tab !== "followed") return;
     setLoading(true);
+    if (tab === "followed") api.accounts().then((as) => setFollowedAccounts(as.filter((a) => a.followed).map((a) => ({ id: a.id, handle: a.handle, avatar_url: a.avatar_url, videos: a.videos })))).catch(() => {});
+    const params: Record<string, string> =
+      tab === "followed"
+        ? { view: "all", period: "all", duration, sort: sort === "views" ? "recent" : sort, unfollowed: "1", followed: "1", q, ...(accountId ? { accountId: String(accountId) } : {}) }
+        : { view: tab === "saved" ? "favorites" : favOnly ? "favorites" : tab, period: tab === "saved" ? "all" : period, duration, sort, unfollowed: tab === "saved" ? "1" : unfollowed ? "1" : "0", q };
     api
-      .videos({ view: tab === "saved" ? "favorites" : favOnly ? "favorites" : tab, period: tab === "saved" ? "all" : period, duration, sort, unfollowed: tab === "saved" ? "1" : unfollowed ? "1" : "0", q })
+      .videos(params)
       .then((v) => {
         setCards(tab === "viral" && favOnly ? v.filter((c) => c.metrics.viral) : v);
         setError(null);
       })
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [tab, period, duration, sort, unfollowed, favOnly, q]);
+  }, [tab, period, duration, sort, unfollowed, favOnly, q, accountId]);
 
   useEffect(() => {
     loadVideos();
@@ -279,6 +295,9 @@ export const App: React.FC = () => {
           <TabBtn active={tab === "all"} onClick={() => setTab("all")}>
             Toutes les vidéos <Count n={stats?.total} />
           </TabBtn>
+          <TabBtn active={tab === "followed"} onClick={() => setTab("followed")}>
+            👥 Suivis
+          </TabBtn>
           <TabBtn active={tab === "saved"} onClick={() => setTab("saved")}>
             💾 Enregistrées
           </TabBtn>
@@ -312,8 +331,20 @@ export const App: React.FC = () => {
             }}
           />
         ) : null}
-        {tab === "viral" || tab === "all" || tab === "saved" ? (
+        {tab === "viral" || tab === "all" || tab === "saved" || tab === "followed" ? (
           <>
+            {tab === "followed" ? (
+              <div className="scrollbar-thin mt-3 flex items-center gap-1 overflow-x-auto whitespace-nowrap pb-1 text-xs">
+                <button onClick={() => setAccountId(null)} className={`rounded-full border px-3 py-1 ${accountId === null ? "border-green-500 bg-green-500/15 text-green-300" : "border-zinc-700 hover:bg-zinc-800"}`}>Tous les comptes suivis</button>
+                {followedAccounts.map((a) => (
+                  <button key={a.id} onClick={() => setAccountId(a.id)} className={`flex items-center gap-1 rounded-full border px-2 py-1 ${accountId === a.id ? "border-green-500 bg-green-500/15 text-green-300" : "border-zinc-700 hover:bg-zinc-800"}`}>
+                    {a.avatar_url ? <img src={a.avatar_url} alt="" className="h-4 w-4 rounded-full" /> : null}@{a.handle}
+                    <span className="text-zinc-500">{a.videos}</span>
+                  </button>
+                ))}
+                <span className="ml-2 text-zinc-500">Toutes les vidéos relevées des comptes suivis, sans filtre de viralité. Le nombre par compte se règle dans Réglages.</span>
+              </div>
+            ) : null}
             {tab === "viral" ? <TrendsPanel /> : null}
             {tab === "viral" ? (
               <IdeasPanel
@@ -331,7 +362,7 @@ export const App: React.FC = () => {
               />
             ) : null}
             <div className="my-4 flex flex-wrap items-center gap-2 text-sm">
-              <div className="flex overflow-hidden rounded-lg border border-zinc-700">
+              {tab === "viral" || tab === "all" ? <div className="flex overflow-hidden rounded-lg border border-zinc-700">
                 {PERIODS.map((p) => (
                   <button
                     key={p.k}
@@ -341,7 +372,7 @@ export const App: React.FC = () => {
                     {p.l}
                   </button>
                 ))}
-              </div>
+              </div> : null}
               <select value={duration} onChange={(e) => setDuration(e.target.value)} className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5">
                 <option value="all">Toutes durées</option>
                 <option value="short">Moins de 15 s</option>
@@ -357,14 +388,18 @@ export const App: React.FC = () => {
                 <option value="score">Score viral</option>
                 <option value="recent">Les plus récentes</option>
               </select>
-              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-700 px-3 py-1.5">
-                <input type="checkbox" checked={unfollowed} onChange={(e) => setUnfollowed(e.target.checked)} className="accent-green-500" />
-                Comptes non suivis
-              </label>
-              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-700 px-3 py-1.5">
-                <input type="checkbox" checked={favOnly} onChange={(e) => setFavOnly(e.target.checked)} className="accent-green-500" />
-                ⭐ Favoris
-              </label>
+              {tab === "viral" || tab === "all" ? (
+                <>
+                  <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-700 px-3 py-1.5">
+                    <input type="checkbox" checked={unfollowed} onChange={(e) => setUnfollowed(e.target.checked)} className="accent-green-500" />
+                    Comptes non suivis
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-700 px-3 py-1.5">
+                    <input type="checkbox" checked={favOnly} onChange={(e) => setFavOnly(e.target.checked)} className="accent-green-500" />
+                    ⭐ Favoris
+                  </label>
+                </>
+              ) : null}
               <input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}

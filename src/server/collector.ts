@@ -64,7 +64,8 @@ async function discover(): Promise<CollectedVideo[]> {
   for (const h of followed) {
     runState.step = `compte @${h}`;
     try {
-      out.push(...(await browserCollectAccount(h, per, log)));
+      // Comptes suivis : on lit toutes leurs vidéos récentes (réglage « Vidéos par compte suivi »), sans tri de viralité.
+      out.push(...(await browserCollectAccount(h, Math.max(per, settings.videosPerAccount), log)));
     } catch (e) {
       log(`compte @${h} : ${(e as Error).message}`);
       if (/Playwright n'est pas installé|Executable doesn't exist/.test((e as Error).message)) break;
@@ -198,22 +199,24 @@ export async function runWatch(): Promise<void> {
 }
 
 /** Import manuel d'une ou plusieurs URL TikTok. */
-export async function importUrls(urls: string[]): Promise<{ ok: number; errors: string[] }> {
+export async function importUrls(urls: string[]): Promise<{ ok: number; errors: string[]; ids: number[] }> {
   let ok = 0;
   const errors: string[] = [];
+  const ids: number[] = [];
   for (const u of urls) {
     try {
       const cv = await fetchTikTokVideo(u, "import");
       const { video, isNew } = upsertVideo(cv);
       detectAlert(video, isNew);
       await cacheCover(video);
+      ids.push(video.id);
       ok++;
     } catch (e) {
       errors.push(`${u} : ${(e as Error).message}`);
     }
     await sleep(500);
   }
-  return { ok, errors };
+  return { ok, errors, ids };
 }
 
 let discoveryTimer: NodeJS.Timeout | null = null;

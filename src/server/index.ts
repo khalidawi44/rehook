@@ -95,6 +95,7 @@ const ListSchema = z.object({
   duration: z.enum(["all", "short", "medium", "long", "xlong"]).default("all"),
   sort: z.enum(["views", "vph", "growth", "engagement", "recent", "score"]).default("views"),
   unfollowed: z.enum(["0", "1"]).default("0"),
+  followed: z.enum(["0", "1"]).optional(),
   q: z.string().default(""),
   accountId: z.coerce.number().optional(),
 });
@@ -102,7 +103,7 @@ const ListSchema = z.object({
 app.get("/api/videos", (req, res) => {
   const parsed = ListSchema.safeParse(req.query);
   if (!parsed.success) return res.status(400).json({ error: "Filtres invalides" });
-  const q: ListQuery = { ...parsed.data, unfollowed: parsed.data.unfollowed === "1" };
+  const q: ListQuery = { ...parsed.data, unfollowed: parsed.data.unfollowed === "1", followed: parsed.data.followed === "1" };
   res.json(listCards(q));
 });
 
@@ -246,6 +247,7 @@ const SettingsSchema = z.object({
   alertMinViews: z.number().min(0).optional(),
   alertMinViewsPerHour: z.number().min(0).optional(),
   videosPerSource: z.number().min(1).max(200).optional(),
+  videosPerAccount: z.number().min(1).max(300).optional(),
   language: z.string().optional(),
   feedEnabled: z.boolean().optional(),
 });

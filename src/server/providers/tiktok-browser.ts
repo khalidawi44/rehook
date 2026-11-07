@@ -87,7 +87,8 @@ async function collectFromPages(
           log(`navigateur : ${target.url} renvoyé vers ${landed} : TikTok ne sert pas cette page sans compte connecté. Le fil varié (Explorer) et les comptes suivis restent disponibles ; pour un sujet précis, importe des URL ou suis des comptes.`);
         }
         let rounds = 0;
-        while (items.size < perPage && rounds < 6) {
+        const maxRounds = Math.min(14, Math.ceil(perPage / 10) + 2);
+        while (items.size < perPage && rounds < maxRounds) {
           await page.mouse.wheel(0, 2_500);
           await page.waitForTimeout(2_500);
           rounds++;

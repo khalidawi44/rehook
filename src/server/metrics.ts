@@ -169,6 +169,8 @@ export type ListQuery = {
   duration: "all" | "short" | "medium" | "long" | "xlong";
   sort: "views" | "vph" | "growth" | "engagement" | "recent" | "score";
   unfollowed: boolean;
+  /** Uniquement les vidéos des comptes suivis. */
+  followed?: boolean;
   q: string;
   accountId?: number;
 };
@@ -223,9 +225,10 @@ export function listCards(q: ListQuery): VideoCard[] {
     where.push("(v.posted_at IS NULL OR v.posted_at >= ?)");
     params.push(nowS - periodS);
   }
-  if (!q.unfollowed) {
-    // Par défaut : comptes suivis + vidéos trouvées par hashtag/mot-clé/import.
-    // Le bouton « Comptes non suivis » montre tout.
+  if (q.followed) where.push("a.followed = 1");
+  else if (!q.unfollowed) {
+    // Sans « Comptes non suivis » : comptes suivis + vidéos trouvées par hashtag, recherche ou import.
+    where.push("(a.followed = 1 OR v.source IN ('hashtag', 'keyword', 'import'))");
   }
   if (q.accountId) {
     where.push("v.account_id = ?");

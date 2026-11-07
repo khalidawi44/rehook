@@ -733,6 +733,29 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
     }
   };
 
+  const [urlImport, setUrlImport] = useState("");
+  const importFromUrl = async () => {
+    const u = urlImport.trim();
+    if (!/tiktok\.com/.test(u)) return notify("Colle un lien TikTok (tiktok.com/...).");
+    setUploading(true);
+    try {
+      const r = await api.import(u);
+      if (r.errors.length) notify(r.errors[0]);
+      const src = await api.montageSources();
+      setSources(src);
+      const id = r.ids[0];
+      const v = src.videos.find((x) => x.id === String(id));
+      if (!v) return notify("Vidéo importée mais introuvable dans le chutier.");
+      await add({ kind: "video", id: v.id }, v.name, v.url, v.durationS);
+      setUrlImport("");
+      setLibTab("videos");
+      notify("Vidéo TikTok ajoutée au montage (et gardée dans le chutier).");
+    } catch (e) {
+      notify((e as Error).message);
+    } finally {
+      setUploading(false);
+    }
+  };
   const uploadVideo = async (file: File) => {
     setUploading(true);
     try {
@@ -970,6 +993,10 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
                 <span className="ml-auto">{lib.length}</span>
               </div>
             ) : null}
+            <div className="flex gap-1">
+              <input value={urlImport} onChange={(e) => setUrlImport(e.target.value)} onKeyDown={(e) => e.key === "Enter" && importFromUrl()} placeholder="Lien TikTok à mettre dans le montage" className={inputCls + " flex-1 text-xs"} disabled={uploading} />
+              <button onClick={importFromUrl} disabled={uploading || !urlImport.trim()} className="rounded-lg bg-green-500 px-2 py-1 text-xs font-semibold text-black hover:bg-green-400 disabled:opacity-50" title="Télécharge la vidéo TikTok et l'ajoute à la timeline">{uploading ? "…" : "+ URL"}</button>
+            </div>
             <label className="block cursor-pointer rounded-lg border border-dashed border-zinc-700 p-2 text-center text-xs text-zinc-400 hover:bg-zinc-800">
               {uploading ? "Import en cours…" : "+ Importer une vidéo (PC ou téléphone)"}
               <input type="file" accept="video/*" className="hidden" disabled={uploading} onChange={(e) => e.target.files?.[0] && uploadVideo(e.target.files[0])} />

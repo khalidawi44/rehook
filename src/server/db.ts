@@ -191,6 +191,8 @@ export type Settings = {
   alertMinViews: number;
   alertMinViewsPerHour: number;
   videosPerSource: number;
+  /** Comptes suivis : nombre de vidéos lues par compte à chaque découverte (toutes, sans filtre). */
+  videosPerAccount: number;
   language: string;
   packLoaded: string;
   /** Fil varié : lit les catégories de la page Explorer de TikTok à chaque découverte. */
@@ -211,6 +213,7 @@ const DEFAULT_SETTINGS: Settings = {
   alertMinViews: 5_000,
   alertMinViewsPerHour: 3_000,
   videosPerSource: 30,
+  videosPerAccount: 80,
   language: "auto",
   packLoaded: "",
   feedEnabled: true,
