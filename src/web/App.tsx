@@ -435,6 +435,11 @@ export const App: React.FC = () => {
             setDetail(null);
           }}
           onFavorite={() => toggleFav(detail)}
+          onFollowed={() => {
+            notify(`@${detail.account.handle} est maintenant suivi.`);
+            loadVideos();
+            loadStats();
+          }}
           onDeleted={() => {
             setDetail(null);
             loadVideos();

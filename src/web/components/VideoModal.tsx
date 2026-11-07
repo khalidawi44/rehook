@@ -9,8 +9,23 @@ export const VideoModal: React.FC<{
   onRecreate: () => void;
   onFavorite: () => void;
   onDeleted: () => void;
-}> = ({ card, onClose, onRecreate, onFavorite, onDeleted }) => {
+  onFollowed?: () => void;
+}> = ({ card, onClose, onRecreate, onFavorite, onDeleted, onFollowed }) => {
   const [snaps, setSnaps] = useState<Snapshot[]>([]);
+  const [followed, setFollowed] = useState(card.account.followed);
+  const [followBusy, setFollowBusy] = useState(false);
+  const follow = async () => {
+    setFollowBusy(true);
+    try {
+      await api.addAccount(card.account.handle);
+      setFollowed(true);
+      onFollowed?.();
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setFollowBusy(false);
+    }
+  };
   const [playerError, setPlayerError] = useState(false);
   useEffect(() => {
     api.video(card.id).then((v) => setSnaps(v.snapshots)).catch(() => {});
@@ -88,6 +103,14 @@ export const VideoModal: React.FC<{
             </button>
             <button onClick={onFavorite} className="rounded-xl border border-zinc-700 px-4 py-2 hover:bg-zinc-800">
               {card.favorite ? "★ Favori" : "☆ Mettre en favori"}
+            </button>
+            <button
+              onClick={follow}
+              disabled={followed || followBusy}
+              title={followed ? "Compte déjà suivi" : "Suivre ce compte : ses nouvelles vidéos arrivent à chaque découverte"}
+              className={`rounded-xl border px-4 py-2 ${followed ? "border-green-700 text-green-300" : "border-zinc-700 hover:bg-zinc-800"} disabled:opacity-70`}
+            >
+              {followed ? "● Compte suivi" : followBusy ? "…" : `➕ Suivre @${card.account.handle}`}
             </button>
             <button onClick={remove} className="ml-auto rounded-xl border border-red-900 px-4 py-2 text-red-300 hover:bg-red-950">
               Retirer

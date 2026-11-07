@@ -687,7 +687,7 @@ async function recentrage() {
   const before = getSettings();
   const removed = Number(db.prepare("DELETE FROM accounts WHERE lower(handle) <> ?").run(keep).changes);
   // Marqué fait tout de suite : un plantage plus loin ne doit pas refaire la suppression.
-  saveSettings({ hashtags: [], keywords: [], packLoaded: "", done: [...before.done, RECENTRAGE] });
+  saveSettings({ hashtags: [], keywords: [], packLoaded: "", done: [...before.done, RECENTRAGE, NETTOYAGE] });
   log(`recentrage : ${removed} compte(s) supprimé(s) avec leurs vidéos, @${keep} conservé`);
   let info: Parameters<typeof upsertAccount>[0] = { handle: keep };
   try {
@@ -706,6 +706,33 @@ async function recentrage() {
   await runWatch();
 }
 
+// Nettoyage du 07/11/2026 : les pages hashtag renvoyées vers l'accueil avaient fait entrer le flux
+// « Pour toi » (humour) comme vidéos de hashtag. On retire les vidéos hors niche des comptes non suivis.
+const NETTOYAGE = "nettoyage-20261107";
+function nettoyage() {
+  const s = getSettings();
+  const tags = new Set(s.hashtags.map((h) => h.toLowerCase()));
+  const rows = db
+    .prepare("SELECT v.id, v.hashtags FROM videos v JOIN accounts a ON a.id = v.account_id WHERE a.followed = 0 AND v.favorite = 0 AND v.source IN ('hashtag', 'explore', 'keyword')")
+    .all() as { id: number; hashtags: string }[];
+  let removed = 0;
+  for (const r of rows) {
+    let hs: string[] = [];
+    try {
+      hs = JSON.parse(r.hashtags) as string[];
+    } catch {
+      hs = [];
+    }
+    if (!hs.some((h) => tags.has(h.toLowerCase()))) {
+      db.prepare("DELETE FROM videos WHERE id = ?").run(r.id);
+      removed++;
+    }
+  }
+  const orphans = Number(db.prepare("DELETE FROM accounts WHERE followed = 0 AND id NOT IN (SELECT DISTINCT account_id FROM videos)").run().changes);
+  saveSettings({ done: [...s.done, NETTOYAGE] });
+  log(`nettoyage : ${removed} vidéo(s) hors niche retirée(s), ${orphans} compte(s) sans vidéo retiré(s)`);
+}
+
 const port = Number(process.env.PORT ?? 3001);
 app.listen(port, () => {
   console.log(`[niche] API sur http://localhost:${port}`);
@@ -714,6 +741,13 @@ app.listen(port, () => {
   const settings = getSettings();
   scheduleRefresh();
   scheduleUpdateChecks();
+  if (settings.done.includes(RECENTRAGE) && !settings.done.includes(NETTOYAGE)) {
+    try {
+      nettoyage();
+    } catch (e) {
+      console.error("[niche] nettoyage :", (e as Error).message);
+    }
+  }
   if (!settings.done.includes(RECENTRAGE)) {
     recentrage().catch((e) => console.error("[niche] recentrage :", (e as Error).message));
   } else if (pack && !settings.packLoaded) {

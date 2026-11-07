@@ -16,8 +16,17 @@ async function loadPlaywright() {
   }
 }
 
+// Réponses JSON acceptées selon la page ouverte : une page hashtag renvoyée vers l'accueil
+// par TikTok émet le flux « Pour toi », qu'il ne faut surtout pas prendre pour le hashtag.
+const ACCEPT: Record<string, RegExp> = {
+  account: /\/api\/post\/item_list/,
+  hashtag: /\/api\/challenge\/item_list/,
+  keyword: /\/api\/search\/(general|item)\/full|\/api\/search\/item_list/,
+  explore: /\/api\/(prefetch\/explore|explore|recommend)\/item_list/,
+};
+
 async function collectFromPages(
-  urls: { url: string; source: string; handleHint?: string }[],
+  urls: { url: string; source: string; handleHint?: string; tag?: string }[],
   perPage: number,
   log: Logger,
 ): Promise<CollectedVideo[]> {
@@ -32,13 +41,17 @@ async function collectFromPages(
       const items = new Map<string, CollectedVideo>();
       const handler = async (resp: { url(): string; json(): Promise<unknown> }) => {
         const u = resp.url();
-        if (!/\/api\/(post|challenge|search|prefetch\/explore)\/item_list|\/api\/search\/(general|item)\/full/.test(u)) return;
+        if (!(ACCEPT[target.source] ?? ACCEPT.explore).test(u)) return;
         try {
           const j = (await resp.json()) as { itemList?: unknown[]; data?: { item?: unknown }[] };
           const list = j.itemList ?? (j.data ?? []).map((d) => d.item).filter(Boolean) ?? [];
           for (const it of list as Parameters<typeof itemToVideo>[0][]) {
             const v = itemToVideo(it, target.source, target.handleHint);
-            if (v) items.set(v.externalId, v);
+            if (!v) continue;
+            // Page hashtag : on ne garde que les vidéos qui portent vraiment ce hashtag.
+            if (target.tag && !v.hashtags.includes(target.tag)) continue;
+            if (target.handleHint && v.account.handle.toLowerCase() !== target.handleHint.toLowerCase()) continue;
+            items.set(v.externalId, v);
           }
         } catch {
           // réponse vide ou non JSON : TikTok a bloqué cette requête
@@ -74,7 +87,7 @@ export async function browserCollectAccount(handle: string, perPage: number, log
 
 export async function browserCollectHashtag(tag: string, perPage: number, log: Logger) {
   const t = tag.replace(/^#/, "");
-  return collectFromPages([{ url: `https://www.tiktok.com/tag/${encodeURIComponent(t)}`, source: "hashtag" }], perPage, log);
+  return collectFromPages([{ url: `https://www.tiktok.com/tag/${encodeURIComponent(t)}`, source: "hashtag", tag: t.toLowerCase() }], perPage, log);
 }
 
 export async function browserCollectKeyword(keyword: string, perPage: number, log: Logger) {
