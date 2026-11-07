@@ -35,6 +35,8 @@ export type VideoCard = {
   music: string | null;
   source: string;
   favorite: boolean;
+  category: string | null;
+  seen: boolean;
   account: {
     id: number;
     handle: string;
@@ -147,6 +149,8 @@ export function toCard(video: VideoRow, account: AccountRow, snaps: SnapshotRow[
     music: video.music,
     source: video.source,
     favorite: !!video.favorite,
+    category: video.category ?? null,
+    seen: !!video.seen_at,
     account: {
       id: account.id,
       handle: account.handle,
@@ -168,6 +172,46 @@ export type ListQuery = {
   q: string;
   accountId?: number;
 };
+
+/**
+ * Fil façon TikTok : vidéos variées, pas encore vues d'abord, mélangées entre catégories.
+ * `category` : une catégorie Explorer, « niche » (comptes suivis, hashtags, recherches), ou vide pour tout.
+ */
+export function feedCards(category: string, limit = 24): VideoCard[] {
+  resetMedianCache();
+  const where = ["v.source <> 'demo'", "v.cover_url IS NOT NULL OR v.cover_file IS NOT NULL"];
+  const params: (string | number)[] = [];
+  if (category === "niche") where.push("(a.followed = 1 OR v.source IN ('hashtag', 'keyword', 'account', 'import'))");
+  else if (category) {
+    where.push("v.category = ?");
+    params.push(category);
+  }
+  const rows = db
+    .prepare(`SELECT v.*, a.handle AS a_handle FROM videos v JOIN accounts a ON a.id = v.account_id WHERE ${where.map((w) => `(${w})`).join(" AND ")} ORDER BY (v.seen_at IS NULL) DESC, RANDOM() LIMIT ?`)
+    .all(...params, limit * 4) as (VideoRow & { a_handle: string })[];
+  // Mélange : jamais deux vidéos de suite de la même catégorie ou du même compte quand on peut l'éviter.
+  const picked: VideoRow[] = [];
+  const pool = rows.slice();
+  while (picked.length < limit && pool.length) {
+    const last = picked[picked.length - 1];
+    let idx = pool.findIndex((r) => !last || ((r.category ?? r.source) !== (last.category ?? last.source) && r.account_id !== last.account_id));
+    if (idx < 0) idx = 0;
+    picked.push(pool.splice(idx, 1)[0]);
+  }
+  const accStmt = db.prepare("SELECT * FROM accounts WHERE id = ?");
+  const snapStmt = db.prepare("SELECT * FROM snapshots WHERE video_id = ? ORDER BY captured_at DESC LIMIT 6");
+  return picked.map((v) => toCard(v, accStmt.get(v.account_id) as AccountRow, snapStmt.all(v.id) as SnapshotRow[]));
+}
+
+export function feedCategories(): { key: string; n: number; unseen: number }[] {
+  const rows = db
+    .prepare("SELECT category AS key, COUNT(*) AS n, SUM(CASE WHEN seen_at IS NULL THEN 1 ELSE 0 END) AS unseen FROM videos WHERE source <> 'demo' AND category IS NOT NULL GROUP BY category ORDER BY n DESC")
+    .all() as { key: string; n: number; unseen: number }[];
+  const niche = db
+    .prepare("SELECT COUNT(*) AS n, SUM(CASE WHEN v.seen_at IS NULL THEN 1 ELSE 0 END) AS unseen FROM videos v JOIN accounts a ON a.id = v.account_id WHERE v.source <> 'demo' AND (a.followed = 1 OR v.source IN ('hashtag', 'keyword', 'account', 'import'))")
+    .get() as { n: number; unseen: number };
+  return [{ key: "niche", n: niche.n, unseen: niche.unseen ?? 0 }, ...rows];
+}
 
 export function listCards(q: ListQuery): VideoCard[] {
   resetMedianCache();

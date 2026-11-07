@@ -10,6 +10,7 @@ import { apifyCollect } from "./providers/apify.js";
 import {
   browserCollectAccount,
   browserCollectExplore,
+  browserCollectExploreCategories,
   browserCollectHashtag,
   browserCollectKeyword,
 } from "./providers/tiktok-browser.js";
@@ -87,7 +88,15 @@ async function discover(): Promise<CollectedVideo[]> {
       break;
     }
   }
-  if (!followed.length && !settings.hashtags.length && !settings.keywords.length) {
+  if (settings.feedEnabled) {
+    // Fil varié : toutes les catégories de la page Explorer, pour avoir de tout comme sur TikTok.
+    runState.step = "fil varié (Explorer)";
+    try {
+      out.push(...(await browserCollectExploreCategories(Math.min(per, 24), log)));
+    } catch (e) {
+      log(`explorer : ${(e as Error).message}`);
+    }
+  } else if (!followed.length && !settings.hashtags.length && !settings.keywords.length) {
     runState.step = "page Explorer";
     try {
       out.push(...(await browserCollectExplore(per, log)));

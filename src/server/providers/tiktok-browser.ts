@@ -7,6 +7,26 @@ import { BROWSER_UA, itemToVideo } from "./tiktok-page.js";
 
 type Logger = (line: string) => void;
 
+/** Catégories de la page Explorer (libellés FR et EN tels qu'affichés par TikTok). */
+export const EXPLORE_CATEGORIES: { key: string; labels: string[] }[] = [
+  { key: "Chant et danse", labels: ["Chant et danse", "Singing & Dancing", "Chant & danse"] },
+  { key: "Comédie", labels: ["Comédie", "Comedy"] },
+  { key: "Sport", labels: ["Sport", "Sports"] },
+  { key: "Anime et BD", labels: ["Anime et BD", "Anime & Comics", "Anime & BD"] },
+  { key: "Relations", labels: ["Relations", "Relationship"] },
+  { key: "Spectacles", labels: ["Spectacles", "Shows"] },
+  { key: "Synchronisation labiale", labels: ["Synchronisation labiale", "Lipsync"] },
+  { key: "Vie quotidienne", labels: ["Vie quotidienne", "Daily Life"] },
+  { key: "Beauté", labels: ["Beauté", "Beauty Care", "Beauté et soins"] },
+  { key: "Jeux", labels: ["Jeux", "Games"] },
+  { key: "Société", labels: ["Société", "Society"] },
+  { key: "Tenues", labels: ["Tenues", "Outfit"] },
+  { key: "Voitures", labels: ["Voitures", "Cars"] },
+  { key: "Alimentation", labels: ["Alimentation", "Food"] },
+  { key: "Animaux", labels: ["Animaux", "Animals"] },
+  { key: "Famille", labels: ["Famille", "Family"] },
+];
+
 async function loadPlaywright() {
   try {
     const pw = await import("playwright");
@@ -61,6 +81,11 @@ async function collectFromPages(
       try {
         await page.goto(target.url, { waitUntil: "domcontentloaded", timeout: 45_000 });
         await page.waitForTimeout(5_000);
+        const landed = page.url();
+        const wanted = new URL(target.url).pathname;
+        if (!landed.includes(wanted)) {
+          log(`navigateur : ${target.url} renvoyé vers ${landed} : TikTok ne sert pas cette page sans compte connecté. Le fil varié (Explorer) et les comptes suivis restent disponibles ; pour un sujet précis, importe des URL ou suis des comptes.`);
+        }
         let rounds = 0;
         while (items.size < perPage && rounds < 6) {
           await page.mouse.wheel(0, 2_500);
@@ -78,6 +103,80 @@ async function collectFromPages(
     await browser.close();
   }
   return out;
+}
+
+/**
+ * Fil varié : la page Explorer publique de TikTok et ses catégories (Danse, Comédie, Beauté…).
+ * Chaque catégorie est un bouton de la page ; les vidéos reçues après le clic portent son nom.
+ */
+export async function browserCollectExploreCategories(perPage: number, log: Logger, only?: string[]): Promise<CollectedVideo[]> {
+  const chromium = await loadPlaywright();
+  const executablePath = process.env.PLAYWRIGHT_EXECUTABLE || undefined;
+  const browser = await chromium.launch({ executablePath, args: ["--no-sandbox"] });
+  const out = new Map<string, CollectedVideo>();
+  try {
+    const ctx = await browser.newContext({ userAgent: BROWSER_UA, viewport: { width: 1280, height: 900 }, locale: "fr-FR" });
+    const page = await ctx.newPage();
+    let current = "Pour toi";
+    const handler = async (resp: { url(): string; json(): Promise<unknown> }) => {
+      const u = resp.url();
+      if (!ACCEPT.explore.test(u)) return;
+      try {
+        const j = (await resp.json()) as { itemList?: unknown[] };
+        for (const it of (j.itemList ?? []) as Parameters<typeof itemToVideo>[0][]) {
+          const v = itemToVideo(it, "explore");
+          if (v) out.set(v.externalId, { ...v, category: current });
+        }
+      } catch {
+        // réponse vide
+      }
+    };
+    page.on("response", handler);
+    await page.goto("https://www.tiktok.com/explore", { waitUntil: "domcontentloaded", timeout: 45_000 });
+    await page.waitForTimeout(5_000);
+    if (!page.url().includes("/explore")) log(`explorer : renvoyé vers ${page.url()}`);
+    for (let r = 0; r < 2; r++) {
+      await page.mouse.wheel(0, 2_500);
+      await page.waitForTimeout(2_000);
+    }
+    log(`explorer : Pour toi : ${out.size} vidéo(s)`);
+    const cats = EXPLORE_CATEGORIES.filter((c) => !only?.length || only.includes(c.key));
+    for (const cat of cats) {
+      const sizeBefore = out.size;
+      current = cat.key;
+      let clicked = false;
+      for (const label of cat.labels) {
+        const btn = page.getByRole("button", { name: label, exact: true }).first();
+        if (await btn.count().catch(() => 0)) {
+          await btn.click({ timeout: 5_000 }).catch(() => {});
+          clicked = true;
+          break;
+        }
+        const alt = page.locator(`button:has-text("${label}"), [role=tab]:has-text("${label}"), span:text-is("${label}")`).first();
+        if (await alt.count().catch(() => 0)) {
+          await alt.click({ timeout: 5_000 }).catch(() => {});
+          clicked = true;
+          break;
+        }
+      }
+      if (!clicked) {
+        log(`explorer : catégorie « ${cat.key} » introuvable sur la page`);
+        continue;
+      }
+      await page.waitForTimeout(3_000);
+      let rounds = 0;
+      while (out.size - sizeBefore < perPage && rounds < 3) {
+        await page.mouse.wheel(0, 2_500);
+        await page.waitForTimeout(2_000);
+        rounds++;
+      }
+      log(`explorer : ${cat.key} : ${out.size - sizeBefore} vidéo(s)`);
+    }
+    page.off("response", handler);
+  } finally {
+    await browser.close();
+  }
+  return [...out.values()];
 }
 
 export async function browserCollectAccount(handle: string, perPage: number, log: Logger) {

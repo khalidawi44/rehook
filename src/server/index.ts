@@ -6,7 +6,7 @@ import path from "node:path";
 import express from "express";
 import { z } from "zod";
 import { db, getSettings, now, saveSettings, upsertAccount, type AccountRow, type SnapshotRow, type VideoRow } from "./db.js";
-import { listCards, stats, toCard, type ListQuery } from "./metrics.js";
+import { feedCards, feedCategories, listCards, stats, toCard, type ListQuery } from "./metrics.js";
 import { discoveryMode, importUrls, log, runCollection, runState, runWatch, scheduleRefresh } from "./collector.js";
 import { listAlerts, markSeen, unseenCount } from "./alerts.js";
 import { listPacks, loadPack } from "./packs/index.js";
@@ -126,6 +126,22 @@ app.get(
   }),
 );
 
+// ---- Fil façon TikTok ---------------------------------------------------------
+app.get("/api/feed", (req, res) => {
+  const category = String(req.query.category ?? "");
+  const limit = Math.min(60, Math.max(1, Number(req.query.limit ?? 24)));
+  res.json({ cards: feedCards(category, limit), categories: feedCategories() });
+});
+app.post("/api/feed/seen", (req, res) => {
+  const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).map(Number).filter((n: number) => Number.isInteger(n) && n > 0) as number[];
+  if (ids.length) db.prepare(`UPDATE videos SET seen_at = COALESCE(seen_at, ?) WHERE id IN (${ids.map(() => "?").join(",")})`).run(now(), ...ids);
+  res.json({ ok: true, n: ids.length });
+});
+app.post("/api/feed/reset", (_req, res) => {
+  const r = db.prepare("UPDATE videos SET seen_at = NULL").run();
+  res.json({ ok: true, n: Number(r.changes) });
+});
+
 app.post("/api/videos/:id/favorite", (req, res) => {
   db.prepare("UPDATE videos SET favorite = CASE favorite WHEN 1 THEN 0 ELSE 1 END WHERE id = ?").run(Number(req.params.id));
   const v = db.prepare("SELECT favorite FROM videos WHERE id = ?").get(Number(req.params.id)) as { favorite: number } | undefined;
@@ -231,6 +247,7 @@ const SettingsSchema = z.object({
   alertMinViewsPerHour: z.number().min(0).optional(),
   videosPerSource: z.number().min(1).max(200).optional(),
   language: z.string().optional(),
+  feedEnabled: z.boolean().optional(),
 });
 
 app.put("/api/settings", (req, res) => {

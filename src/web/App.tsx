@@ -5,6 +5,7 @@ import { RecorderPanel } from "./components/RecorderPanel";
 import { MontagePanel } from "./components/MontagePanel";
 import { TrendsPanel } from "./components/TrendsPanel";
 import { IdeasPanel } from "./components/IdeasPanel";
+import { FeedPanel } from "./components/FeedPanel";
 import { PlanningPanel } from "./components/PlanningPanel";
 import { VideoCard } from "./components/VideoCard";
 import { VideoModal } from "./components/VideoModal";
@@ -14,7 +15,7 @@ import { AccountsPanel } from "./components/AccountsPanel";
 import { SettingsModal } from "./components/SettingsModal";
 import { ImportModal } from "./components/ImportModal";
 
-type Tab = "viral" | "all" | "accounts" | "jobs" | "alerts" | "recorder" | "montage" | "planning";
+type Tab = "feed" | "viral" | "all" | "saved" | "accounts" | "jobs" | "alerts" | "recorder" | "montage" | "planning";
 
 const PERIODS = [
   { k: "24h", l: "24 h" },
@@ -140,10 +141,10 @@ export const App: React.FC = () => {
   };
 
   const loadVideos = useCallback(() => {
-    if (tab !== "viral" && tab !== "all") return;
+    if (tab !== "viral" && tab !== "all" && tab !== "saved") return;
     setLoading(true);
     api
-      .videos({ view: favOnly ? "favorites" : tab, period, duration, sort, unfollowed: unfollowed ? "1" : "0", q })
+      .videos({ view: tab === "saved" ? "favorites" : favOnly ? "favorites" : tab, period: tab === "saved" ? "all" : period, duration, sort, unfollowed: tab === "saved" ? "1" : unfollowed ? "1" : "0", q })
       .then((v) => {
         setCards(tab === "viral" && favOnly ? v.filter((c) => c.metrics.viral) : v);
         setError(null);
@@ -269,11 +270,17 @@ export const App: React.FC = () => {
 
       <main className="mx-auto max-w-7xl px-3 pt-3 sm:px-4 sm:pt-4">
         <nav className="scrollbar-thin -mx-3 flex items-center gap-1 overflow-x-auto whitespace-nowrap border-b border-zinc-800 px-3 text-sm sm:mx-0 sm:flex-wrap sm:px-0">
+          <TabBtn active={tab === "feed"} onClick={() => setTab("feed")}>
+            📺 Fil
+          </TabBtn>
           <TabBtn active={tab === "viral"} onClick={() => setTab("viral")}>
             🔥 Viral <Count n={stats?.viralAll} />
           </TabBtn>
           <TabBtn active={tab === "all"} onClick={() => setTab("all")}>
             Toutes les vidéos <Count n={stats?.total} />
+          </TabBtn>
+          <TabBtn active={tab === "saved"} onClick={() => setTab("saved")}>
+            💾 Enregistrées
           </TabBtn>
           <TabBtn active={tab === "accounts"} onClick={() => setTab("accounts")}>
             Comptes <Count n={stats?.accounts} />
@@ -295,7 +302,17 @@ export const App: React.FC = () => {
           </TabBtn>
         </nav>
 
-        {tab === "viral" || tab === "all" ? (
+        {tab === "feed" ? (
+          <FeedPanel
+            notify={notify}
+            onOpen={(c) => setDetail(c)}
+            onRecreate={(c) => setRecreate(c)}
+            onChanged={() => {
+              loadStats();
+            }}
+          />
+        ) : null}
+        {tab === "viral" || tab === "all" || tab === "saved" ? (
           <>
             {tab === "viral" ? <TrendsPanel /> : null}
             {tab === "viral" ? (
@@ -372,7 +389,9 @@ export const App: React.FC = () => {
                 <p className="mt-2 text-sm">
                   {tab === "viral"
                     ? "Une vidéo est « virale » si elle a moins de 7 jours et dépasse les seuils des réglages. Les nouvelles vidéos des comptes suivis arrivent à chaque découverte."
-                    : "Élargissez la période, ajoutez des hashtags ou des comptes dans les réglages, importez une URL TikTok, ou lancez un relevé."}
+                    : tab === "saved"
+                      ? "Rien d'enregistré pour l'instant. Dans le fil ou sur une fiche vidéo, clique sur « Enregistrer » pour garder une vidéo ici."
+                      : "Élargissez la période, ajoutez des hashtags ou des comptes dans les réglages, importez une URL TikTok, ou lancez un relevé."}
                 </p>
                 <div className="mt-4 flex flex-wrap justify-center gap-2 text-sm">
                   {period !== "all" ? (

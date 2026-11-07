@@ -73,6 +73,13 @@ export const SettingsModal: React.FC<{ stats: Stats | null; onClose: () => void;
             <input type="number" value={s.videosPerSource} onChange={num("videosPerSource")} className={inputCls} />
           </Field>
         </div>
+        <label className="flex items-start gap-2 rounded-xl border border-zinc-800 p-3 text-sm">
+          <input type="checkbox" checked={s.feedEnabled} onChange={(e) => setS({ ...s, feedEnabled: e.target.checked })} className="mt-1 accent-green-500" />
+          <span>
+            <span className="font-medium text-zinc-200">Fil varié (onglet 📺 Fil)</span>
+            <span className="block text-xs text-zinc-500">À chaque découverte, lit la page Explorer de TikTok et ses catégories (danse, comédie, beauté, sport, animaux…) pour avoir de tout, comme sur TikTok. Depuis le fil, un clic pour suivre un compte ou enregistrer une vidéo pour plus tard.</span>
+          </span>
+        </label>
         <div className="rounded-xl border border-zinc-800 p-3">
           <div className="mb-2 text-sm font-medium text-zinc-200">Veille en continu</div>
           <div className="grid gap-4 sm:grid-cols-3">

@@ -131,7 +131,21 @@ export type VideoRow = {
   favorite: number;
   first_seen_at: number;
   last_seen_at: number;
+  category: string | null;
+  seen_at: number | null;
 };
+
+// Colonnes ajoutées après la création de la table (ALTER TABLE ignoré si déjà présentes).
+for (const [table, col, def] of [
+  ["videos", "category", "TEXT"],
+  ["videos", "seen_at", "INTEGER"],
+] as const) {
+  try {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+  } catch {
+    // déjà là
+  }
+}
 
 export type SnapshotRow = {
   id: number;
@@ -179,6 +193,8 @@ export type Settings = {
   videosPerSource: number;
   language: string;
   packLoaded: string;
+  /** Fil varié : lit les catégories de la page Explorer de TikTok à chaque découverte. */
+  feedEnabled: boolean;
   /** Actions ponctuelles déjà exécutées au démarrage (recentrages, migrations). */
   done: string[];
 };
@@ -197,6 +213,7 @@ const DEFAULT_SETTINGS: Settings = {
   videosPerSource: 30,
   language: "auto",
   packLoaded: "",
+  feedEnabled: true,
   done: [],
 };
 
@@ -241,6 +258,8 @@ export type CollectedVideo = {
   region?: string | null;
   music?: string | null;
   source: string;
+  /** Catégorie TikTok (page Explorer) : Danse, Comédie, Beauté… */
+  category?: string | null;
   account: CollectedAccount;
   stats: { views: number; likes: number; comments: number; shares: number; saves?: number };
 };
@@ -269,8 +288,8 @@ export function upsertVideo(v: CollectedVideo, platform = "tiktok"): { video: Vi
     .get(platform, v.externalId) as VideoRow | undefined;
   if (!existing) {
     db.prepare(
-      `INSERT INTO videos(platform, external_id, account_id, url, caption, hashtags, duration_s, posted_at, cover_url, region, music, source, first_seen_at, last_seen_at)
-       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO videos(platform, external_id, account_id, url, caption, hashtags, duration_s, posted_at, cover_url, region, music, source, category, first_seen_at, last_seen_at)
+       VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       platform,
       v.externalId,
@@ -284,6 +303,7 @@ export function upsertVideo(v: CollectedVideo, platform = "tiktok"): { video: Vi
       v.region ?? null,
       v.music ?? null,
       v.source,
+      v.category ?? null,
       t,
       t,
     );
@@ -293,6 +313,7 @@ export function upsertVideo(v: CollectedVideo, platform = "tiktok"): { video: Vi
          hashtags = CASE WHEN ? <> '[]' THEN ? ELSE hashtags END,
          duration_s = COALESCE(?, duration_s), posted_at = COALESCE(?, posted_at),
          cover_url = COALESCE(?, cover_url), region = COALESCE(?, region), music = COALESCE(?, music),
+         category = COALESCE(?, category),
          last_seen_at = ? WHERE id = ?`,
     ).run(
       v.caption,
@@ -304,6 +325,7 @@ export function upsertVideo(v: CollectedVideo, platform = "tiktok"): { video: Vi
       v.coverUrl ?? null,
       v.region ?? null,
       v.music ?? null,
+      v.category ?? null,
       t,
       existing.id,
     );

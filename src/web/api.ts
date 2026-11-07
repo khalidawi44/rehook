@@ -32,6 +32,8 @@ export type VideoCard = {
   music: string | null;
   source: string;
   favorite: boolean;
+  category: string | null;
+  seen: boolean;
   account: { id: number; handle: string; nickname: string | null; avatar: string | null; followers: number | null; followed: boolean };
   metrics: Metrics;
 };
@@ -231,6 +233,7 @@ export type Settings = {
   videosPerSource: number;
   language: string;
   packLoaded: string;
+  feedEnabled: boolean;
 };
 
 export type Scene = { narration: string; onScreen: string; visual: string; keywords: string[]; seconds: number };
@@ -307,6 +310,9 @@ export const api = {
   addAccount: (handle: string) => req<Account>("/api/accounts", { method: "POST", body: JSON.stringify({ handle }) }),
   setFollowed: (id: number, followed: boolean) => req<{ ok: boolean }>(`/api/accounts/${id}`, { method: "PATCH", body: JSON.stringify({ followed }) }),
   deleteAccount: (id: number) => req<{ ok: boolean }>(`/api/accounts/${id}`, { method: "DELETE" }),
+  feed: (category: string, limit = 24) => req<{ cards: VideoCard[]; categories: { key: string; n: number; unseen: number }[] }>(`/api/feed?category=${encodeURIComponent(category)}&limit=${limit}`),
+  feedSeen: (ids: number[]) => req<{ ok: boolean }>("/api/feed/seen", { method: "POST", body: JSON.stringify({ ids }) }),
+  feedReset: () => req<{ ok: boolean; n: number }>("/api/feed/reset", { method: "POST", body: "{}" }),
   bulkAccounts: (action: "delete" | "keep" | "unfollow", ids: number[]) => req<{ ok: boolean; changes: number }>("/api/accounts/bulk", { method: "POST", body: JSON.stringify({ action, ids }) }),
   ideas: () => req<{ running: boolean; result: IdeasResult | null }>("/api/ideas"),
   generateIdeas: (opts: { days: number; count: number; theme: string }) => req<IdeasResult>("/api/ideas", { method: "POST", body: JSON.stringify(opts) }),
