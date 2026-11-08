@@ -45,7 +45,31 @@ function ApiUp() {
   try { $r = Invoke-WebRequest -UseBasicParsing "$url/api/stats" -TimeoutSec 2; return ($r.StatusCode -eq 200) } catch { return $false }
 }
 
+# Raccourci « Niche » sur le Bureau, toujours pointe vers CE dossier (un vieux raccourci vers un
+# ancien emplacement lancait une autre copie).
+function RefreshShortcut() {
+  try {
+    $desktop = [Environment]::GetFolderPath("Desktop")
+    $lnk = Join-Path $desktop "Niche.lnk"
+    $target = Join-Path $here "Niche.cmd"
+    $shell = New-Object -ComObject WScript.Shell
+    $sc = $shell.CreateShortcut($lnk)
+    if ($sc.TargetPath -ne $target) {
+      $sc.TargetPath = $target
+      $sc.WorkingDirectory = $here
+      $sc.Description = "Niche : veille TikTok et montage"
+      $icon = Join-Path $here "public\icons\niche.ico"
+      if (Test-Path $icon) { $sc.IconLocation = $icon }
+      $sc.Save()
+      Say "Raccourci du Bureau mis a jour : $lnk -> $target"
+    }
+  } catch {
+    Say "Raccourci du Bureau : $($_.Exception.Message)"
+  }
+}
+
 try {
+  RefreshShortcut
   if (-not (Get-Command node -ErrorAction SilentlyContinue)) { Fail "Node.js est introuvable. Installe-le depuis https://nodejs.org (version 22 ou plus), puis relance." }
   $nodeMajor = [int]((node -v).TrimStart("v").Split(".")[0])
   if ($nodeMajor -lt 22) { Fail "Node.js $(node -v) est trop ancien : il faut la version 22 ou plus." }
