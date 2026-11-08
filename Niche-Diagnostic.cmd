@@ -8,5 +8,11 @@ echo.
 echo Dernieres lignes des erreurs du serveur :
 if exist "data\niche.err.log" powershell -NoProfile -Command "Get-Content 'data\niche.err.log' -Tail 15"
 echo.
-echo === Lancement visible ===
-powershell -NoProfile -ExecutionPolicy Bypass -NoExit -File "%~dp0launch.ps1"
+echo === Lancement visible (chaque etape s'affiche ici et dans data\lanceur.log) ===
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0launch.ps1"
+echo.
+echo === Le lanceur a rendu la main (code %ERRORLEVEL%). Dernieres lignes du journal : ===
+if exist "data\lanceur.log" powershell -NoProfile -Command "Get-Content 'data\lanceur.log' -Tail 15"
+echo.
+echo Cette fenetre reste ouverte : fais une capture et envoie-la.
+pause

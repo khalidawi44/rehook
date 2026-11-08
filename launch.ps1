@@ -10,9 +10,14 @@ $url = "http://localhost:$port"
 New-Item -ItemType Directory -Force -Path "data" | Out-Null
 $log = Join-Path $here "data\niche.log"
 $launcherLog = Join-Path $here "data\lanceur.log"
-"==== $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') lancement" | Out-File -Append -Encoding utf8 $launcherLog
+"==== $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') lancement depuis $here" | Out-File -Append -Encoding utf8 $launcherLog
+Write-Host "Niche : lancement depuis $here (journal : $launcherLog)"
 
-function Say($m) { ("[{0}] {1}" -f (Get-Date -Format 'HH:mm:ss'), $m) | Out-File -Append -Encoding utf8 $launcherLog }
+function Say($m) {
+  $line = ("[{0}] {1}" -f (Get-Date -Format 'HH:mm:ss'), $m)
+  $line | Out-File -Append -Encoding utf8 $launcherLog
+  Write-Host $line
+}
 # git ecrit sa progression sur stderr : on passe par cmd pour que PowerShell ne le prenne pas pour une erreur.
 function Git([string]$arguments) {
   $out = cmd /c "git $arguments 2>&1"
@@ -76,7 +81,7 @@ try {
   if ($running -and -not $updated -and (ApiUp)) {
     Say "Niche tourne deja : ouverture du navigateur."
     Start-Process $url
-    exit 0
+    return
   }
   if ($running) {
     Say "Arret de l'instance precedente (PID $($running.OwningProcess))."
