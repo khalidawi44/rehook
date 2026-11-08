@@ -128,7 +128,15 @@ try {
   if ($restart) { Say "Pret apres mise a jour (onglet existant)." } else { Say "Pret : ouverture de $url"; Start-Process $url }
   # Mise a jour depuis l'outil : le serveur relance ce lanceur lui-meme (NICHE_RESTART=1) puis s'arrete.
   $proc.WaitForExit()
-  Say "Serveur arrete (code $($proc.ExitCode))."
+  $code = $proc.ExitCode
+  Say "Serveur arrete (code $code)."
+  if ($code -ne 0 -and $code -ne 75 -and -not (Listening)) {
+    $tail = ""
+    $errLog = Join-Path $here "data\niche.err.log"
+    if (Test-Path $errLog) { $tail = ((Get-Content $errLog -Tail 12) -join "`n") }
+    Add-Type -AssemblyName System.Windows.Forms
+    [System.Windows.Forms.MessageBox]::Show("Niche s'est arrete tout seul (code $code).`n`nDernieres erreurs :`n$tail`n`nJournal complet : $errLog", "Niche", "OK", "Warning") | Out-Null
+  }
 } catch {
   Fail $_.Exception.Message
 }

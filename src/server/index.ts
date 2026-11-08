@@ -4,6 +4,21 @@ import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
 import express from "express";
+
+// Une erreur imprévue ne doit pas tuer le serveur en silence : on la journalise et on continue.
+const CRASH_LOG = path.join(process.cwd(), "data", "niche.crash.log");
+function logCrash(kind: string, e: unknown) {
+  const msg = `${new Date().toISOString()} ${kind} : ${e instanceof Error ? e.stack ?? e.message : String(e)}\n`;
+  console.error("[niche]", kind, e);
+  try {
+    fs.mkdirSync(path.dirname(CRASH_LOG), { recursive: true });
+    fs.appendFileSync(CRASH_LOG, msg);
+  } catch {
+    // disque indisponible
+  }
+}
+process.on("unhandledRejection", (e) => logCrash("promesse rejetée", e));
+process.on("uncaughtException", (e) => logCrash("exception non rattrapée", e));
 import { z } from "zod";
 import { db, getSettings, now, saveSettings, upsertAccount, type AccountRow, type SnapshotRow, type VideoRow } from "./db.js";
 import { feedCards, feedCategories, listCards, stats, toCard, type ListQuery } from "./metrics.js";
