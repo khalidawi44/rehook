@@ -7,17 +7,17 @@
 ## Installation (une commande, en root sur le serveur)
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/khalidawi44/lfi-nantes-clos-toreau/claude/conversation-continuity-devices-giNbj/niche/deploy/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/khalidawi44/niche/main/deploy/install.sh)
 ```
 
-Le script installe Docker, clone le dépôt dans `/opt/niche`, pose les questions (domaine, mot de passe, clés) et écrit `niche/.env`, construit l'image (Node 22 + Chromium) et démarre Niche derrière Caddy. Il ajoute aussi une tâche horaire (`/etc/cron.hourly/niche-update`) qui met Niche à jour depuis GitHub : même automatisme que le lanceur Windows.
+Le script installe Docker, clone le dépôt dans `/opt/niche`, pose les questions (domaine, mot de passe, clés) et écrit `.env`, construit l'image (Node 22 + Chromium) et démarre Niche derrière Caddy. Il ajoute aussi une tâche horaire (`/etc/cron.hourly/niche-update`) qui met Niche à jour depuis GitHub : même automatisme que le lanceur Windows.
 
 ## Au quotidien
 - Ouvrir `https://ton-domaine` (ou `http://IP`), entrer le mot de passe, puis sur le téléphone « Ajouter à l'écran d'accueil ».
-- Journal : `docker compose -f /opt/niche/niche/deploy/docker-compose.yml logs -f niche`
-- Mise à jour forcée : `/opt/niche/niche/deploy/update.sh`
-- Changer un réglage : éditer `/opt/niche/niche/.env` puis `cd /opt/niche/niche/deploy && docker compose --env-file ../.env up -d`
-- Données (base, vidéos, rendus, modèles) : `/opt/niche/niche/data`, à sauvegarder.
+- Journal : `docker compose -f /opt/niche/deploy/docker-compose.yml logs -f niche`
+- Mise à jour forcée : `/opt/niche/deploy/update.sh`
+- Changer un réglage : éditer `/opt/niche/.env` puis `cd /opt/niche/deploy && docker compose --env-file ../.env up -d`
+- Données (base, vidéos, rendus, modèles) : `/opt/niche/data`, à sauvegarder.
 
 ## Détails
 - `Dockerfile` : image officielle Playwright (Chromium et ses bibliothèques, utilisés par la découverte TikTok et par Remotion), `npm ci`, construction de l'interface.

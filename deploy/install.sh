@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Installation de Niche sur un serveur Ubuntu 22.04 ou 24.04 (VPS 4 Go de RAM conseillés).
-# Usage, en root sur le serveur :  bash <(curl -fsSL https://raw.githubusercontent.com/khalidawi44/lfi-nantes-clos-toreau/claude/conversation-continuity-devices-giNbj/niche/deploy/install.sh)
+# Usage, en root sur le serveur :  bash <(curl -fsSL https://raw.githubusercontent.com/khalidawi44/niche/main/deploy/install.sh)
 set -euo pipefail
-REPO="${NICHE_REPO:-https://github.com/khalidawi44/lfi-nantes-clos-toreau.git}"
-BRANCH="${NICHE_BRANCH:-claude/conversation-continuity-devices-giNbj}"
+REPO="${NICHE_REPO:-https://github.com/khalidawi44/niche.git}"
+BRANCH="${NICHE_BRANCH:-main}"
 DIR="${NICHE_DIR:-/opt/niche}"
 
 echo "== Niche : installation dans $DIR"
@@ -18,7 +18,7 @@ if [ ! -d "$DIR/.git" ]; then
 else
   git -C "$DIR" fetch origin "$BRANCH" && git -C "$DIR" reset --hard "origin/$BRANCH"
 fi
-cd "$DIR/niche"
+cd "$DIR"
 
 if [ ! -f .env ]; then
   cp .env.example .env
@@ -53,7 +53,7 @@ docker compose --env-file ../.env up -d --build
 # Mise à jour automatique toutes les heures (git + reconstruction si nouveau commit).
 cat > /etc/cron.hourly/niche-update <<CRON
 #!/usr/bin/env bash
-exec $DIR/niche/deploy/update.sh >> /var/log/niche-update.log 2>&1
+exec $DIR/deploy/update.sh >> /var/log/niche-update.log 2>&1
 CRON
 chmod +x /etc/cron.hourly/niche-update
 
@@ -62,4 +62,4 @@ IP=$(curl -fsS https://api.ipify.org || hostname -I | awk '{print $1}')
 echo
 echo "== Niche tourne."
 if [ -n "$DOMAIN" ]; then echo "   https://$DOMAIN  (le certificat arrive en moins d'une minute)"; else echo "   http://$IP"; fi
-echo "   Journal : docker compose -f $DIR/niche/deploy/docker-compose.yml logs -f niche"
+echo "   Journal : docker compose -f $DIR/deploy/docker-compose.yml logs -f niche"
