@@ -125,7 +125,7 @@ Pendant chaque live : noter les minutes des moments forts (une feuille, ou le ch
 
 ## 8. Niche, réglé pour GTA 6
 
-Au prochain lancement de `E:\GitHub\lfi-nantes-clos-toreau\niche\Niche.cmd` :
+Au prochain lancement de `E:\GitHub\niche\Niche.cmd` :
 - les anciens comptes suivis sont retirés (sauf @galeriedesconneries), @rockstargames est suivi, les hashtags et recherches passent sur GTA 6 ;
 - l'onglet Fil (catégorie Jeux) et l'onglet Viral te montrent ce qui explose ; bouton « Suivre » sur les créateurs GTA que tu croises, « Enregistrer » pour les idées ;
 - le panneau « Idées de vidéos à tourner » propose des sujets à partir de ce qui marche (clé Anthropic dans `.env`) ;
