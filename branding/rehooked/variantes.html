@@ -1,0 +1,24 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+body{margin:0;background:#1d1d24;font-family:Inter,system-ui;color:#f2f2f5}
+.row{display:flex;gap:28px;padding:28px}
+.cell{display:flex;flex-direction:column;align-items:center;gap:10px;font-size:18px}
+svg{display:block}
+</style></head><body>
+<div class="row" id="row"></div>
+<script>
+const CORAL="#FF4D4D", DARK="#15151C", W="#FFFFFF";
+const bg=(fill)=>`<rect x="0" y="0" width="512" height="512" rx="112" fill="${fill}"/>`;
+const st=(c,w=58)=>`fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"`;
+const glyphs={
+ "A2. Hameçon incliné, œillet": c=>`<g transform="rotate(-18 256 256)"><circle cx="318" cy="92" r="34" ${st(c,44)}/><path d="M318 126 V300 A98 98 0 0 1 122 300 V222" ${st(c,62)}/><path d="M122 262 L176 288" ${st(c,52)}/></g>`,
+ "D2. Play accroché": c=>`<path d="M256 60 V130" ${st(c,52)}/><path d="M256 130 V312 A84 84 0 0 1 88 312 V250" ${st(c,52)}/><path d="M88 284 L134 306" ${st(c,44)}/><path d="M300 150 L430 240 L300 330 Z" fill="${c}"/>`,
+ "F. Ligne + hameçon": c=>`<path d="M430 70 L320 230" ${st(c,40)}/><path d="M320 230 V300 A96 96 0 0 1 128 300 V226" ${st(c,62)}/><path d="M128 266 L182 290" ${st(c,52)}/>`,
+ "G. Hameçon dans un cercle": c=>`<circle cx="256" cy="256" r="196" ${st(c,30)}/><g transform="rotate(-18 256 256)"><path d="M312 118 V296 A80 80 0 0 1 152 296 V232" ${st(c,52)}/><path d="M152 266 L196 288" ${st(c,44)}/></g>`,
+ "H. Play dont la pointe est un hameçon": c=>`<path d="M160 96 L420 256 L160 416" ${st(c,56)}/><path d="M160 416 L160 96" ${st(c,56)}/><path d="M160 416 A72 72 0 0 1 48 360 V318" ${st(c,56)}/>`,
+};
+let html="";
+for (const [name,g] of Object.entries(glyphs)) {
+  html+=`<div class="cell"><svg width="200" height="200" viewBox="0 0 512 512">${bg(DARK)}${g(CORAL)}</svg><svg width="200" height="200" viewBox="0 0 512 512">${bg(CORAL)}${g(W)}</svg><svg width="64" height="64" viewBox="0 0 512 512">${bg(DARK)}${g(CORAL)}</svg><div>${name}</div></div>`;
+}
+document.getElementById("row").innerHTML=html;
+</script></body></html>
