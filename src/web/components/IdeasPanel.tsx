@@ -109,6 +109,11 @@ export const IdeasPanel: React.FC<{ notify: (m: string) => void; onRecreate: (vi
                           ↻ Recréer avec cette idée
                         </button>
                       ) : null}
+                      {i.sources[0] ? (
+                        <a href={`/api/videos/${i.sources[0].id}/media?download=1`} download onClick={() => copy(i)} className="rounded-lg border border-zinc-700 px-2 py-1.5 text-xs hover:bg-zinc-800" title="Télécharge la vidéo source et copie le script, pour monter dans CapCut">
+                          ⬇ CapCut
+                        </a>
+                      ) : null}
                       <button onClick={() => copy(i)} className="rounded-lg border border-zinc-700 px-2 py-1.5 text-xs hover:bg-zinc-800">
                         Copier
                       </button>

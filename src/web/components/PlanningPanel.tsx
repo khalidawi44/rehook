@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { api, type Publication } from "../api";
+import { api, type Publication, type PublishSource } from "../api";
+import { PublishPanel } from "./PublishPanel";
 
 const BEST: { network: string; hours: string; days: string }[] = [
   { network: "TikTok", hours: "12 h à 14 h, 19 h à 22 h", days: "mardi, jeudi, dimanche" },
@@ -14,6 +15,19 @@ export const PlanningPanel: React.FC<{ notify: (m: string) => void }> = ({ notif
   const [pubs, setPubs] = useState<Publication[]>([]);
   const [reminders, setReminders] = useState<{ id: number; due_at: number; message: string }[]>([]);
   const [stats, setStats] = useState<Record<string, unknown>>({});
+  const [uploading, setUploading] = useState(false);
+  const [publish, setPublish] = useState<{ source: PublishSource; title: string } | null>(null);
+  const publishFile = async (file: File) => {
+    setUploading(true);
+    try {
+      const c = await api.saveCapture(file, file.name.replace(/\.[^.]+$/, ""));
+      setPublish({ source: { kind: "capture", id: c.id }, title: c.name });
+    } catch (e) {
+      notify((e as Error).message);
+    } finally {
+      setUploading(false);
+    }
+  };
   useEffect(() => {
     api.publications().then(setPubs).catch(() => {});
     api.reminders().then(setReminders).catch(() => {});
@@ -37,7 +51,13 @@ export const PlanningPanel: React.FC<{ notify: (m: string) => void }> = ({ notif
   };
   return (
     <div className="my-4 grid gap-4 lg:grid-cols-[1fr_320px]">
+      {publish ? <PublishPanel source={publish.source} title={publish.title} onClose={() => setPublish(null)} notify={notify} /> : null}
       <div className="space-y-3">
+        <label className="block cursor-pointer rounded-xl border border-dashed border-green-700 p-4 text-center hover:bg-green-950/40">
+          <div className="text-sm font-semibold text-green-300">{uploading ? "Envoi et préparation du fichier…" : "📣 Publier un montage CapCut"}</div>
+          <div className="mt-1 text-xs text-zinc-400">Dépose ici la vidéo exportée de CapCut ou de l'éditeur TikTok : descriptions et hashtags par réseau, puis publication partout.</div>
+          <input type="file" accept="video/*" className="hidden" disabled={uploading} onChange={(e) => e.target.files?.[0] && publishFile(e.target.files[0])} />
+        </label>
         <div className="rounded-xl border border-zinc-800 p-3">
           <div className="mb-2 text-sm font-medium">📅 Publications programmées</div>
           {!byDay.size ? <p className="text-sm text-zinc-500">Rien de programmé. Depuis « Publier partout », choisis une date pour programmer.</p> : null}

@@ -101,6 +101,9 @@ export const VideoModal: React.FC<{
             >
               ✂️ Envoyer au montage
             </button>
+            <a href={`/api/videos/${card.id}/media?download=1`} download className="rounded-xl border border-zinc-700 px-4 py-2 hover:bg-zinc-800" title="Télécharge la vidéo d'origine, à importer dans CapCut ou l'éditeur TikTok">
+              ⬇ Télécharger pour CapCut
+            </a>
             <button onClick={onFavorite} className="rounded-xl border border-zinc-700 px-4 py-2 hover:bg-zinc-800">
               {card.favorite ? "★ Favori" : "☆ Mettre en favori"}
             </button>

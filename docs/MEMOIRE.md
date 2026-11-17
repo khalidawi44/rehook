@@ -48,7 +48,7 @@ Dernière mise à jour : 17 novembre 2026.
 - Ne jamais lancer deux lanceurs en même temps (installation corrompue).
 
 - Problème signalé le 17/11/2026 au soir : la chaîne GTA 6 ne trouve aucune vidéo, y compris sur les comptes suivis (@rockstargames à 0). Un secours a été ajouté (lecture des liens de la grille du profil puis de chaque page vidéo). Cause exacte non établie : il faut les lignes « navigateur : » de `E:\REHOOK\data\rehook.log`.
-- Montage : Fabrice juge CapCut et l'éditeur TikTok meilleurs que le montage de Rehook et veut « exactement le même », sinon il utilise CapCut. Position donnée : Rehook ne rattrapera pas CapCut en montage ; voie proposée, à valider par Fabrice : Rehook pour trouver, préparer et publier, CapCut pour monter, avec un passage simple entre les deux.
+- Montage : Fabrice juge CapCut et l'éditeur TikTok meilleurs que le montage de Rehook et veut « exactement le même », sinon il utilise CapCut. Position donnée : Rehook ne rattrapera pas CapCut en montage ; **voie validée par Fabrice le 17/11/2026** : Rehook pour trouver, préparer et publier, CapCut pour monter. Boutons « Télécharger pour CapCut » (fiche vidéo, carte, fil, idées) et dépôt « Publier un montage CapCut » dans l'onglet Planning.
 
 ## 6. À faire
 

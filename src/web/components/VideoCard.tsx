@@ -83,6 +83,9 @@ export const VideoCard: React.FC<{
           >
             ↻ Recréer cette vidéo
           </button>
+          <a href={`/api/videos/${card.id}/media?download=1`} download title="Télécharger pour CapCut" className="grid place-items-center rounded-xl border border-zinc-700 px-3 hover:bg-zinc-800">
+            ⬇
+          </a>
           <button onClick={onOpen} title="Fiche de la vidéo" className="rounded-xl border border-zinc-700 px-3 hover:bg-zinc-800">
             📄
           </button>

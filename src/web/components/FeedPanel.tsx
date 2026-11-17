@@ -177,6 +177,7 @@ export const FeedPanel: React.FC<{
                 <Btn onClick={() => follow(c)} icon={c.account.followed ? "✓" : "➕"} label={c.account.followed ? "Suivi" : "Suivre"} active={c.account.followed} title={`Suivre @${c.account.handle}`} />
                 <Btn onClick={() => onRecreate(c)} icon="↻" label="Recréer" />
                 <Btn onClick={() => { sendToMontage({ source: { kind: "video", id: String(c.id) }, name: `@${c.account.handle} : ${c.caption.slice(0, 60)}`, url: `/api/videos/${c.id}/media`, durationS: c.durationS }); notify("Envoyée au montage."); }} icon="✂️" label="Montage" />
+                <Btn onClick={() => { const a = document.createElement("a"); a.href = `/api/videos/${c.id}/media?download=1`; a.download = ""; a.click(); notify("Téléchargement lancé : importe le fichier dans CapCut."); }} icon="⬇" label="CapCut" title="Télécharger pour CapCut" />
                 <Btn onClick={() => onOpen(c)} icon="📄" label="Fiche" />
                 <Btn onClick={() => window.open(c.url, "_blank")} icon="↗" label="TikTok" />
               </div>

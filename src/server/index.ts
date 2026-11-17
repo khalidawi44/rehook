@@ -138,6 +138,12 @@ app.get(
     if (!video) return void res.status(404).json({ error: "Vidéo introuvable" });
     const file = await ensureSourceFile(video, (l) => console.warn("[rehook]", l));
     if (!file) return void res.status(404).json({ error: "Vidéo d'origine indisponible (démo, ou TikTok a refusé le fichier)" });
+    if (req.query.download) {
+      // Téléchargement pour monter ailleurs (CapCut, éditeur TikTok) : nom de fichier lisible.
+      const account = db.prepare("SELECT handle FROM accounts WHERE id = ?").get(video.account_id) as { handle: string } | undefined;
+      const name = `${account?.handle ?? "video"}-${video.external_id}.mp4`.replace(/[^a-zA-Z0-9._-]/g, "_");
+      return void res.download(file, name);
+    }
     res.sendFile(file, { acceptRanges: true, headers: { "Content-Type": "video/mp4", "Cache-Control": "private, max-age=3600" } });
   }),
 );
