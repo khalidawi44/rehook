@@ -1,8 +1,8 @@
-# Niche : repérer les vidéos virales, les recréer et les monter
+# Rehook : repérer les vidéos virales, les recréer et les monter
 
-Dépôt autonome : https://github.com/khalidawi44/niche (projet indépendant, sans lien avec un autre dépôt).
+Dépôt autonome : https://github.com/khalidawi44/rehook (projet indépendant, sans lien avec un autre dépôt).
 
-Niche est un tableau de bord local (Node 22, React, SQLite) qui :
+Rehook est un tableau de bord local (Node 22, React, SQLite) qui :
 
 1. **relève des vidéos TikTok** (hashtags, mots-clés, comptes suivis, URL importées) et garde un historique de leurs compteurs ;
 2. **calcule pour chaque vidéo** : vues, vues par heure, croissance depuis le dernier relevé, engagement, et un verdict « Viral » ;
@@ -10,12 +10,12 @@ Niche est un tableau de bord local (Node 22, React, SQLite) qui :
 
 ## Démarrer
 
-**Windows, en un double-clic** : `Niche.cmd` à la racine du dépôt (clic droit → Envoyer vers → Bureau pour avoir un raccourci). Il tourne sans fenêtre : à chaque lancement il met Niche à jour depuis GitHub, installe ce qui manque, construit l'interface, démarre le serveur en arrière-plan et ouvre http://localhost:3001 dès que l'API répond. Si Niche tourne déjà et qu'il n'y a pas de mise à jour, il ouvre juste l'onglet. Au premier lancement il ouvre `.env` dans le Bloc-notes pour la clé Anthropic. Fermer le dernier onglet Niche (PC ou téléphone) arrête le serveur deux minutes plus tard, sauf si un rendu est en cours ; `Arreter-Niche.cmd` l'arrête tout de suite. Journaux : `data\lanceur.log`, `data\niche.log`, `data\niche.err.log`. Il faut Node.js 22 ou plus et git.
+**Windows, en un double-clic** : `Rehook.cmd` à la racine du dépôt (clic droit → Envoyer vers → Bureau pour avoir un raccourci). Il tourne sans fenêtre : à chaque lancement il met Rehook à jour depuis GitHub, installe ce qui manque, construit l'interface, démarre le serveur en arrière-plan et ouvre http://localhost:3001 dès que l'API répond. Si Rehook tourne déjà et qu'il n'y a pas de mise à jour, il ouvre juste l'onglet. Au premier lancement il ouvre `.env` dans le Bloc-notes pour la clé Anthropic. Fermer le dernier onglet Rehook (PC ou téléphone) arrête le serveur deux minutes plus tard, sauf si un rendu est en cours ; `Arreter-Rehook.cmd` l'arrête tout de suite. Journaux : `data\lanceur.log`, `data\rehook.log`, `data\rehook.err.log`. Il faut Node.js 22 ou plus et git.
 
 **À la main (toutes plateformes)** :
 
 ```bash
-git clone https://github.com/khalidawi44/niche.git
+git clone https://github.com/khalidawi44/rehook.git
 cd niche
 npm install
 cp .env.example .env     # mettre au moins ANTHROPIC_API_KEY
@@ -36,7 +36,7 @@ La première ouverture charge 16 vidéos de démonstration (comptes `demo_…`) 
 
 Pour le mode `browser` : `npx playwright install chromium` une fois. TikTok peut demander une vérification et renvoyer 0 vidéo ; dans ce cas le journal du relevé (Réglages) le dit, et le mode `apify` ou l'import d'URL restent disponibles.
 
-Les miniatures TikTok expirent au bout de quelques heures : Niche en garde une copie dans `data/covers/`.
+Les miniatures TikTok expirent au bout de quelques heures : Rehook en garde une copie dans `data/covers/`.
 
 ## Veille en continu et alertes
 
@@ -74,7 +74,7 @@ Chaque recréation passe par cinq étapes, visibles dans l'onglet Recréations :
 2. **Script** (Claude, modèle `NICHE_MODEL`, défaut `claude-opus-5-5`) : images clés, transcription, texte incrusté, légende, hashtags, durée et stats sont envoyés ; le modèle décrit d'abord ce qui se passe dans la source et son mécanisme, puis renvoie une variante au même mécanisme (accroche, scènes avec narration, texte à l'écran et visuel, légende, hashtags, palette). Un sketch joué par des personnes est marqué « tournage » : les scènes deviennent un script à filmer, et la vidéo rendue sert de maquette.
 3. **Visuels** (`NICHE_IMAGES`) : `stock-video` (recommandé ; clé Pixabay gratuite et immédiate sur pixabay.com/api/docs, et/ou clé Pexels) cherche pour chaque scène des clips vidéo libres de droits à partir d'une requête écrite par le modèle d'après le plan correspondant de la source ; le modèle choisit ensuite le clip le plus proche parmi les vignettes (en regardant les images clés de la source). Scène sans clip : photo Pexels en secours si la clé existe, sinon fond typographique. Autres valeurs : `pexels` (photos), `openai` (images générées), `none` (fonds typographiques). Les crédits des clips sont listés dans la fiche de la tâche et dans `credits.txt`.
 4. **Voix off** (`NICHE_VOICE`) : `edge` (gratuit, sans clé, donne le minutage de chaque mot pour le karaoké), `openai`, `elevenlabs`, `piper` (local) ou `none`.
-5. **Rendu** : Remotion (`src/video/Niche.tsx`), 30 i/s, H.264. Le MP4 arrive dans `data/renders/` et se lit ou se télécharge depuis l'interface.
+5. **Rendu** : Remotion (`src/video/Rehook.tsx`), 30 i/s, H.264. Le MP4 arrive dans `data/renders/` et se lit ou se télécharge depuis l'interface.
 
 Depuis la fiche d'une recréation : copier la légende et les hashtags, refaire le rendu avec le même script, ou demander un nouveau script. La musique de fond se choisit parmi les fichiers déposés dans `data/public/music/` (vérifier la licence de ce qu'on y met).
 
@@ -82,7 +82,7 @@ Pour retoucher le rendu à l'œil : `npm run remotion:studio`.
 
 ## Sur un serveur cloud (accès de partout)
 
-Voir `deploy/README.md` : une commande installe Niche sur un VPS Ubuntu (Docker, Caddy avec HTTPS automatique, mot de passe `NICHE_PASSWORD`, mise à jour horaire depuis GitHub). La veille tourne alors 24 h/24, les alertes arrivent sur le téléphone, et l'appli s'installe sur l'écran d'accueil depuis n'importe où.
+Voir `deploy/README.md` : une commande installe Rehook sur un VPS Ubuntu (Docker, Caddy avec HTTPS automatique, mot de passe `NICHE_PASSWORD`, mise à jour horaire depuis GitHub). La veille tourne alors 24 h/24, les alertes arrivent sur le téléphone, et l'appli s'installe sur l'écran d'accueil depuis n'importe où.
 
 ## Publier en un clic
 
@@ -94,11 +94,11 @@ Depuis une recréation terminée ou un export de montage, « 📣 Publier partou
 
 ## Sur le téléphone (iPhone et Android)
 
-Niche est une PWA : même interface, même style. Réglages → « Sur le téléphone » affiche un QR code avec l'adresse du PC sur le Wi-Fi ; on le scanne, puis « Ajouter à l'écran d'accueil » (Partager sur iPhone, menu ⋮ sur Android) installe Niche en plein écran avec son icône. Le PC doit rester allumé avec Niche lancé ; si la page ne s'ouvre pas, autoriser Node.js dans le pare-feu Windows (réseau privé). Tout fonctionne depuis le téléphone (veille, alertes, lecteur, recréation, montage) sauf l'enregistreur d'écran du navigateur, remplacé par celui du système puis un import. Pour un accès hors de la maison : déployer le serveur sur un VPS ou passer par un tunnel (Tailscale).
+Rehook est une PWA : même interface, même style. Réglages → « Sur le téléphone » affiche un QR code avec l'adresse du PC sur le Wi-Fi ; on le scanne, puis « Ajouter à l'écran d'accueil » (Partager sur iPhone, menu ⋮ sur Android) installe Rehook en plein écran avec son icône. Le PC doit rester allumé avec Rehook lancé ; si la page ne s'ouvre pas, autoriser Node.js dans le pare-feu Windows (réseau privé). Tout fonctionne depuis le téléphone (veille, alertes, lecteur, recréation, montage) sauf l'enregistreur d'écran du navigateur, remplacé par celui du système puis un import. Pour un accès hors de la maison : déployer le serveur sur un VPS ou passer par un tunnel (Tailscale).
 
 ## Lecteur intégré
 
-La fiche d'une vidéo (clic sur une carte, bouton « Voir » d'une alerte) lit la vidéo d'origine dans Niche : c'est le fichier mp4 que TikTok sert, donc sans les sous-titres ajoutés par le lecteur TikTok (seuls restent les textes incrustés par le créateur dans l'image). Le fichier est téléchargé une fois dans `data/analysis/<id>/` et resservi ensuite (`/api/videos/:id/media`). La fiche d'une recréation montre aussi l'original à côté du résultat.
+La fiche d'une vidéo (clic sur une carte, bouton « Voir » d'une alerte) lit la vidéo d'origine dans Rehook : c'est le fichier mp4 que TikTok sert, donc sans les sous-titres ajoutés par le lecteur TikTok (seuls restent les textes incrustés par le créateur dans l'image). Le fichier est téléchargé une fois dans `data/analysis/<id>/` et resservi ensuite (`/api/videos/:id/media`). La fiche d'une recréation montre aussi l'original à côté du résultat.
 
 ## Montage
 
@@ -129,7 +129,7 @@ Onglet ✂️ Montage : un chutier (vidéos relevées, enregistrements et fichie
 
 ## Enregistreur d'écran
 
-Onglet 🎥 Enregistreur : choisir un écran, une fenêtre ou un onglet, puis régler la zone de capture (déplacer, redimensionner par le coin, ou tracer ; forme 9:16, carrée, 16:9 ou libre) et la taille de sortie (1080x1920, 1080x1080, 1920x1080, 720x1280 ou toute taille). Son du système si le navigateur le fournit, micro en option, 24 à 60 images par seconde. À l'arrêt : aperçu, téléchargement WebM, ou « Garder dans Niche » qui convertit en MP4 H.264 (ffmpeg embarqué) dans `data/public/captures/`. Un enregistrement gardé se choisit ensuite comme fond des scènes sans clip dans la fenêtre « Recréer » (il défile d'une scène à l'autre). Chrome ou Edge conseillés.
+Onglet 🎥 Enregistreur : choisir un écran, une fenêtre ou un onglet, puis régler la zone de capture (déplacer, redimensionner par le coin, ou tracer ; forme 9:16, carrée, 16:9 ou libre) et la taille de sortie (1080x1920, 1080x1080, 1920x1080, 720x1280 ou toute taille). Son du système si le navigateur le fournit, micro en option, 24 à 60 images par seconde. À l'arrêt : aperçu, téléchargement WebM, ou « Garder dans Rehook » qui convertit en MP4 H.264 (ffmpeg embarqué) dans `data/public/captures/`. Un enregistrement gardé se choisit ensuite comme fond des scènes sans clip dans la fenêtre « Recréer » (il défile d'une scène à l'autre). Chrome ou Edge conseillés.
 
 ## Arborescence
 
@@ -137,7 +137,7 @@ Onglet 🎥 Enregistreur : choisir un écran, une fenêtre ou un onglet, puis r�
 src/server/         API Express, base SQLite (node:sqlite), collecteurs, pipeline de recréation
   providers/        tiktok-page (page publique), tiktok-browser (Playwright), apify, demo
   recreate/         brief (Claude), images, voice, render (Remotion), index (file d'attente)
-src/video/          composition Remotion « Niche »
+src/video/          composition Remotion « Rehook »
 src/web/            interface React (Vite + Tailwind)
 data/               base, miniatures, rendus, dossier public Remotion (ignoré par git sauf polices)
 ```

@@ -1,4 +1,4 @@
-// API Niche + fichiers statiques (interface compilée, miniatures, rendus).
+// API Rehook + fichiers statiques (interface compilée, miniatures, rendus).
 import "./env.js";
 import os from "node:os";
 import fs from "node:fs";
@@ -6,10 +6,10 @@ import path from "node:path";
 import express from "express";
 
 // Une erreur imprévue ne doit pas tuer le serveur en silence : on la journalise et on continue.
-const CRASH_LOG = path.join(process.cwd(), "data", "niche.crash.log");
+const CRASH_LOG = path.join(process.cwd(), "data", "rehook.crash.log");
 function logCrash(kind: string, e: unknown) {
   const msg = `${new Date().toISOString()} ${kind} : ${e instanceof Error ? e.stack ?? e.message : String(e)}\n`;
-  console.error("[niche]", kind, e);
+  console.error("[rehook]", kind, e);
   try {
     fs.mkdirSync(path.dirname(CRASH_LOG), { recursive: true });
     fs.appendFileSync(CRASH_LOG, msg);
@@ -20,7 +20,7 @@ function logCrash(kind: string, e: unknown) {
 process.on("unhandledRejection", (e) => logCrash("promesse rejetée", e));
 process.on("uncaughtException", (e) => logCrash("exception non rattrapée", e));
 import { z } from "zod";
-import { db, getSettings, now, saveSettings, upsertAccount, type AccountRow, type SnapshotRow, type VideoRow } from "./db.js";
+import { createChannel, db, deleteChannel, getSettings, listChannels, now, parseChannels, renameChannel, saveSettings, setActiveChannel, setFollow, upsertAccount, type AccountRow, type SnapshotRow, type VideoRow } from "./db.js";
 import { feedCards, feedCategories, listCards, stats, toCard, type ListQuery } from "./metrics.js";
 import { discoveryMode, importUrls, log, runCollection, runState, runWatch, scheduleRefresh } from "./collector.js";
 import { listAlerts, markSeen, unseenCount } from "./alerts.js";
@@ -63,7 +63,7 @@ const asyncRoute =
   (fn: (req: express.Request, res: express.Response) => Promise<void>) =>
   (req: express.Request, res: express.Response) =>
     fn(req, res).catch((e: Error) => {
-      console.error("[niche]", e);
+      console.error("[rehook]", e);
       res.status(500).json({ error: e.message });
     });
 
@@ -136,7 +136,7 @@ app.get(
   asyncRoute(async (req, res) => {
     const video = db.prepare("SELECT * FROM videos WHERE id = ?").get(Number(req.params.id)) as VideoRow | undefined;
     if (!video) return void res.status(404).json({ error: "Vidéo introuvable" });
-    const file = await ensureSourceFile(video, (l) => console.warn("[niche]", l));
+    const file = await ensureSourceFile(video, (l) => console.warn("[rehook]", l));
     if (!file) return void res.status(404).json({ error: "Vidéo d'origine indisponible (démo, ou TikTok a refusé le fichier)" });
     res.sendFile(file, { acceptRanges: true, headers: { "Content-Type": "video/mp4", "Cache-Control": "private, max-age=3600" } });
   }),
@@ -200,8 +200,9 @@ app.get("/api/accounts", (_req, res) => {
        FROM accounts a LEFT JOIN videos v ON v.account_id = a.id
        GROUP BY a.id ORDER BY a.followed DESC, videos DESC`,
     )
-    .all();
-  res.json(rows);
+    .all() as (AccountRow & { videos: number })[];
+  const channel = getSettings().activeChannel;
+  res.json(rows.map((a) => ({ ...a, followed: parseChannels(a.channels).includes(channel) ? 1 : 0, followedElsewhere: a.followed && !parseChannels(a.channels).includes(channel) ? 1 : 0 })));
 });
 
 app.post(
@@ -213,17 +214,16 @@ app.post(
     try {
       info = await fetchTikTokProfile(handle);
     } catch (e) {
-      console.warn("[niche] profil :", (e as Error).message);
+      console.warn("[rehook] profil :", (e as Error).message);
     }
     const acc = upsertAccount(info);
-    db.prepare("UPDATE accounts SET followed = 1 WHERE id = ?").run(acc.id);
+    setFollow(acc.id, getSettings().activeChannel, true);
     res.json({ ...acc, followed: 1 });
   }),
 );
 
 app.patch("/api/accounts/:id", (req, res) => {
-  const followed = req.body?.followed ? 1 : 0;
-  db.prepare("UPDATE accounts SET followed = ?, updated_at = ? WHERE id = ?").run(followed, now(), Number(req.params.id));
+  setFollow(Number(req.params.id), getSettings().activeChannel, !!req.body?.followed);
   res.json({ ok: true });
 });
 
@@ -242,8 +242,40 @@ app.post("/api/accounts/bulk", (req, res) => {
   let changes = 0;
   if (action === "delete") changes = Number(db.prepare(`DELETE FROM accounts WHERE id IN (${marks})`).run(...ids).changes);
   else if (action === "keep") changes = Number(db.prepare(`DELETE FROM accounts WHERE id NOT IN (${marks})`).run(...ids).changes);
-  else changes = Number(db.prepare(`UPDATE accounts SET followed = 0, updated_at = ? WHERE id IN (${marks})`).run(now(), ...ids).changes);
+  else {
+    for (const id of ids) setFollow(id, getSettings().activeChannel, false);
+    changes = ids.length;
+  }
   res.json({ ok: true, changes });
+});
+
+// ---- Chaînes (espaces de travail) --------------------------------------------
+app.get("/api/channels", (_req, res) => res.json(listChannels()));
+app.post(
+  "/api/channels",
+  asyncRoute(async (req, res) => {
+    const name = String(req.body?.name ?? "").trim();
+    if (!name) return void res.status(400).json({ error: "Nom manquant" });
+    const ch = createChannel(name);
+    const pack = String(req.body?.pack ?? "");
+    if (pack) await loadPack(pack, log, true);
+    scheduleRefresh();
+    res.json({ channel: ch, ...listChannels() });
+  }),
+);
+app.post("/api/channels/:id/activate", (req, res) => {
+  if (!setActiveChannel(String(req.params.id))) return void res.status(404).json({ error: "Chaîne inconnue" });
+  scheduleRefresh();
+  res.json(listChannels());
+});
+app.put("/api/channels/:id", (req, res) => {
+  if (!renameChannel(String(req.params.id), String(req.body?.name ?? ""))) return void res.status(404).json({ error: "Chaîne inconnue" });
+  res.json(listChannels());
+});
+app.delete("/api/channels/:id", (req, res) => {
+  if (!deleteChannel(String(req.params.id))) return void res.status(400).json({ error: "Impossible : chaîne inconnue ou dernière chaîne" });
+  scheduleRefresh();
+  res.json(listChannels());
 });
 
 // ---- Réglages ----------------------------------------------------------------
@@ -519,7 +551,7 @@ app.post(
   asyncRoute(async (req, res) => {
     const r = parseMontage(req.body?.montage);
     if (typeof r === "string") return void res.status(400).json({ error: r });
-    res.json(await transcribeMontage(r, typeof req.body?.language === "string" ? req.body.language : undefined, (l) => console.log("[niche]", l)));
+    res.json(await transcribeMontage(r, typeof req.body?.language === "string" ? req.body.language : undefined, (l) => console.log("[rehook]", l)));
   }),
 );
 
@@ -534,7 +566,7 @@ async function sourceFile(kind: string, id: string): Promise<string | null> {
     return c ? path.join(CAPTURES_DIR, c.file) : null;
   }
   if (kind === "render") {
-    const f = path.join(RENDERS, `niche-${Number(id)}.mp4`);
+    const f = path.join(RENDERS, `rehook-${Number(id)}.mp4`);
     return fs.existsSync(f) ? f : null;
   }
   return null;
@@ -575,7 +607,7 @@ app.post(
     const cues = z.array(CueSchema).parse(req.body?.cues ?? []);
     const to = String(req.body?.to ?? "en").slice(0, 5);
     if (!process.env.ANTHROPIC_API_KEY) return void res.status(400).json({ error: "ANTHROPIC_API_KEY manquante" });
-    res.json({ cues: await translateCues(cues, to, (l) => console.log("[niche]", l)) });
+    res.json({ cues: await translateCues(cues, to, (l) => console.log("[rehook]", l)) });
   }),
 );
 
@@ -666,7 +698,7 @@ app.post(
       const c = listCapturesForExtract().find((x) => x.id === src.id);
       file = c ? path.join(CAPTURES_DIR, c.file) : null;
     } else if (src.kind === "render") {
-      file = path.join(RENDERS, `niche-${Number(src.id)}.mp4`);
+      file = path.join(RENDERS, `rehook-${Number(src.id)}.mp4`);
     }
     if (!file || !fs.existsSync(file)) return void res.status(404).json({ error: "Fichier source introuvable" });
     const inS = Number(req.body?.inS ?? 0);
@@ -717,7 +749,7 @@ app.post(
     const p = ensurePublication(parsed.data);
     p.hint = String(req.body?.hint ?? "").slice(0, 500);
     p.language = String(req.body?.language ?? "fr").slice(0, 5);
-    p.texts = await generateTexts(p, String(req.body?.extra ?? "").slice(0, 1000), (l) => console.log("[niche]", l));
+    p.texts = await generateTexts(p, String(req.body?.extra ?? "").slice(0, 1000), (l) => console.log("[rehook]", l));
     p.updatedAt = now();
     savePublication(p);
     res.json(p);
@@ -753,7 +785,7 @@ app.post(
     const all = await postizChannels();
     const chosen = all.filter((c) => ids.includes(c.id));
     if (!chosen.length) return void res.status(400).json({ error: "Aucun réseau choisi" });
-    res.json(await postizPublish(p, chosen, typeof req.body?.when === "string" ? req.body.when : null, (l) => console.log("[niche]", l)));
+    res.json(await postizPublish(p, chosen, typeof req.body?.when === "string" ? req.body.when : null, (l) => console.log("[rehook]", l)));
   }),
 );
 
@@ -797,10 +829,10 @@ async function recentrage() {
     log(`recentrage : profil @${keep} : ${(e as Error).message}`);
   }
   const acc = upsertAccount(info);
-  db.prepare("UPDATE accounts SET followed = 1 WHERE id = ?").run(acc.id);
+  setFollow(acc.id, getSettings().activeChannel, true);
   for (const name of ["musique-viking", "sexy-femme"]) {
     const r = await loadPack(name, log);
-    console.log(`[niche] pack ${name} : ${r.accounts} compte(s)`);
+    console.log(`[rehook] pack ${name} : ${r.accounts} compte(s)`);
   }
   scheduleRefresh();
   await runCollection({ discover: true, refresh: false });
@@ -842,9 +874,10 @@ async function recentrageGta6() {
   const before = getSettings();
   saveSettings({ hashtags: [], keywords: [], packLoaded: "", done: [...before.done, RECENTRAGE_GTA6] });
   const removed = Number(db.prepare("DELETE FROM accounts WHERE lower(handle) <> ? AND followed = 1").run(keep).changes);
+  db.prepare("UPDATE accounts SET channels = ? WHERE followed = 1").run(JSON.stringify([getSettings().activeChannel]));
   log(`recentrage GTA 6 : ${removed} compte(s) suivi(s) retiré(s) avec leurs vidéos, @${keep} conservé`);
   const r = await loadPack("gta6", log, true);
-  console.log(`[niche] pack gta6 : ${r.accounts} compte(s)`);
+  console.log(`[rehook] pack gta6 : ${r.accounts} compte(s)`);
   scheduleRefresh();
   await runCollection({ discover: true, refresh: false });
   await runWatch();
@@ -852,7 +885,7 @@ async function recentrageGta6() {
 
 const port = Number(process.env.PORT ?? 3001);
 app.listen(port, () => {
-  console.log(`[niche] API sur http://localhost:${port}`);
+  console.log(`[rehook] API sur http://localhost:${port}`);
   const count = (db.prepare("SELECT COUNT(*) AS n FROM videos").get() as { n: number }).n;
   const pack = process.env.NICHE_PACK ?? "gta6";
   const settings = getSettings();
@@ -862,26 +895,26 @@ app.listen(port, () => {
     try {
       nettoyage();
     } catch (e) {
-      console.error("[niche] nettoyage :", (e as Error).message);
+      console.error("[rehook] nettoyage :", (e as Error).message);
     }
   }
   if (!settings.done.includes(RECENTRAGE)) {
     // Installation neuve : on marque les anciens recentrages comme faits et on passe direct à GTA 6.
     saveSettings({ done: [...settings.done, RECENTRAGE, NETTOYAGE, RECENTRAGE_GTA6] });
-    recentrageGta6().catch((e) => console.error("[niche] recentrage GTA 6 :", (e as Error).message));
+    recentrageGta6().catch((e) => console.error("[rehook] recentrage GTA 6 :", (e as Error).message));
   } else if (!settings.done.includes(RECENTRAGE_GTA6)) {
-    recentrageGta6().catch((e) => console.error("[niche] recentrage GTA 6 :", (e as Error).message));
+    recentrageGta6().catch((e) => console.error("[rehook] recentrage GTA 6 :", (e as Error).message));
   } else if (pack && !settings.packLoaded) {
-    console.log(`[niche] premier lancement : chargement du pack ${pack} (comptes, hashtags, vidéos)…`);
+    console.log(`[rehook] premier lancement : chargement du pack ${pack} (comptes, hashtags, vidéos)…`);
     (async () => {
       for (const name of pack.split(",").map((x) => x.trim()).filter(Boolean)) {
         const r = await loadPack(name, log);
-        console.log(`[niche] pack ${name} : ${r.accounts} compte(s), ${r.videos} vidéo(s)`);
+        console.log(`[rehook] pack ${name} : ${r.accounts} compte(s), ${r.videos} vidéo(s)`);
       }
       await runCollection({ discover: true, refresh: false });
       await runWatch();
-    })().catch((e) => console.error("[niche] pack :", (e as Error).message));
+    })().catch((e) => console.error("[rehook] pack :", (e as Error).message));
   } else if (count === 0 && process.env.NICHE_NO_DEMO !== "1") {
-    console.log(`[niche] base vide : ${seedDemo()} vidéos de démonstration ajoutées`);
+    console.log(`[rehook] base vide : ${seedDemo()} vidéos de démonstration ajoutées`);
   }
 });

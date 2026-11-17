@@ -6,7 +6,13 @@ import { DATA_DIR } from "./paths.js";
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
-export const db = new DatabaseSync(path.join(DATA_DIR, "niche.sqlite"));
+// Ancien nom du fichier (avant le renommage de l'outil) : on le reprend tel quel, données comprises.
+for (const suffix of ["", "-wal", "-shm"]) {
+  const old = path.join(DATA_DIR, "niche.sqlite" + suffix);
+  const now_ = path.join(DATA_DIR, "rehook.sqlite" + suffix);
+  if (fs.existsSync(old) && !fs.existsSync(now_)) fs.renameSync(old, now_);
+}
+export const db = new DatabaseSync(path.join(DATA_DIR, "rehook.sqlite"));
 db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
 
 db.exec(`
@@ -111,6 +117,7 @@ export type AccountRow = {
   followed: number;
   created_at: number;
   updated_at: number;
+  channels: string;
 };
 
 export type VideoRow = {
@@ -133,12 +140,16 @@ export type VideoRow = {
   last_seen_at: number;
   category: string | null;
   seen_at: number | null;
+  /** Chaîne (espace de travail) qui a relevé cette vidéo ; vide = fil partagé (Explorer). */
+  channel_id: string | null;
 };
 
 // Colonnes ajoutées après la création de la table (ALTER TABLE ignoré si déjà présentes).
 for (const [table, col, def] of [
   ["videos", "category", "TEXT"],
   ["videos", "seen_at", "INTEGER"],
+  ["videos", "channel_id", "TEXT"],
+  ["accounts", "channels", "TEXT NOT NULL DEFAULT '[]'"],
 ] as const) {
   try {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
@@ -175,7 +186,13 @@ export type JobRow = {
 
 // ---- Réglages -------------------------------------------------------------
 
+/** Une chaîne = un espace de travail : ses hashtags, ses recherches, ses comptes suivis, son pack. */
+export type Channel = { id: string; name: string; hashtags: string[]; keywords: string[]; packLoaded: string; createdAt: number };
+
 export type Settings = {
+  /** Chaînes (au moins une) et chaîne active. hashtags, keywords et packLoaded ci-dessous sont ceux de la chaîne active. */
+  channels: Channel[];
+  activeChannel: string;
   hashtags: string[];
   keywords: string[];
   viralMinViews: number;
@@ -202,6 +219,8 @@ export type Settings = {
 };
 
 const DEFAULT_SETTINGS: Settings = {
+  channels: [],
+  activeChannel: "",
   hashtags: ["humour", "drole", "humourfrancais", "blague", "sketch"],
   keywords: [],
   viralMinViews: 100_000,
@@ -220,10 +239,8 @@ const DEFAULT_SETTINGS: Settings = {
   done: [],
 };
 
-export function getSettings(): Settings {
-  const row = db.prepare("SELECT value FROM settings WHERE key = 'settings'").get() as
-    | { value: string }
-    | undefined;
+function rawSettings(): Settings {
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'settings'").get() as { value: string } | undefined;
   if (!row) return { ...DEFAULT_SETTINGS };
   try {
     return { ...DEFAULT_SETTINGS, ...(JSON.parse(row.value) as Partial<Settings>) };
@@ -232,12 +249,132 @@ export function getSettings(): Settings {
   }
 }
 
+export const slugify = (s: string) =>
+  s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40) || "chaine";
+
+/** Réglages avec la chaîne active appliquée (hashtags, recherches, pack). Crée la première chaîne au besoin. */
+export function getSettings(): Settings {
+  const s = rawSettings();
+  if (!s.channels.length) {
+    // Première chaîne, créée à partir des réglages existants (migration douce).
+    const gta = s.packLoaded === "gta6" || !s.done.includes("recentrage-gta6-20261117");
+    const name = gta ? "GTA 6" : s.packLoaded ? s.packLoaded.split(",")[0] : "Ma chaîne";
+    const ch: Channel = { id: slugify(name), name, hashtags: s.hashtags, keywords: s.keywords, packLoaded: s.packLoaded, createdAt: now() };
+    s.channels = [ch];
+    s.activeChannel = ch.id;
+    writeSettings(s);
+    db.prepare("UPDATE accounts SET channels = ? WHERE followed = 1 AND (channels = '[]' OR channels = '')").run(JSON.stringify([ch.id]));
+  }
+  const active = s.channels.find((c) => c.id === s.activeChannel) ?? s.channels[0];
+  s.activeChannel = active.id;
+  s.hashtags = active.hashtags;
+  s.keywords = active.keywords;
+  s.packLoaded = active.packLoaded;
+  return s;
+}
+
+function writeSettings(next: Settings) {
+  db.prepare("INSERT INTO settings(key, value) VALUES('settings', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify(next));
+}
+
+/** Enregistre des réglages ; hashtags, recherches et pack vont dans la chaîne active. */
 export function saveSettings(patch: Partial<Settings>): Settings {
-  const next = { ...getSettings(), ...patch };
-  db.prepare(
-    "INSERT INTO settings(key, value) VALUES('settings', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-  ).run(JSON.stringify(next));
-  return next;
+  const cur = getSettings();
+  const next = { ...cur, ...patch };
+  const active = next.channels.find((c) => c.id === next.activeChannel) ?? next.channels[0];
+  if (active) {
+    if (patch.hashtags) active.hashtags = patch.hashtags;
+    if (patch.keywords) active.keywords = patch.keywords;
+    if (patch.packLoaded !== undefined) active.packLoaded = patch.packLoaded;
+  }
+  writeSettings(next);
+  return getSettings();
+}
+
+export function activeChannelId(): string {
+  return getSettings().activeChannel;
+}
+
+export function listChannels(): { channels: Channel[]; active: string } {
+  const s = getSettings();
+  return { channels: s.channels, active: s.activeChannel };
+}
+
+export function createChannel(name: string): Channel {
+  const s = getSettings();
+  let id = slugify(name);
+  let n = 1;
+  while (s.channels.some((c) => c.id === id)) id = `${slugify(name)}-${++n}`;
+  const ch: Channel = { id, name: name.trim() || id, hashtags: [], keywords: [], packLoaded: "", createdAt: now() };
+  s.channels.push(ch);
+  s.activeChannel = ch.id;
+  writeSettings(s);
+  return ch;
+}
+
+export function setActiveChannel(id: string): boolean {
+  const s = getSettings();
+  if (!s.channels.some((c) => c.id === id)) return false;
+  s.activeChannel = id;
+  writeSettings(s);
+  return true;
+}
+
+export function renameChannel(id: string, name: string): boolean {
+  const s = getSettings();
+  const ch = s.channels.find((c) => c.id === id);
+  if (!ch) return false;
+  ch.name = name.trim() || ch.name;
+  writeSettings(s);
+  return true;
+}
+
+/** Supprime une chaîne (jamais la dernière) : ses vidéos propres et ses suivis disparaissent, le fil partagé reste. */
+export function deleteChannel(id: string): boolean {
+  const s = getSettings();
+  if (s.channels.length <= 1 || !s.channels.some((c) => c.id === id)) return false;
+  s.channels = s.channels.filter((c) => c.id !== id);
+  if (s.activeChannel === id) s.activeChannel = s.channels[0].id;
+  writeSettings(s);
+  db.prepare("DELETE FROM videos WHERE channel_id = ?").run(id);
+  for (const a of db.prepare("SELECT id, channels FROM accounts").all() as { id: number; channels: string }[]) {
+    const list = parseChannels(a.channels).filter((c) => c !== id);
+    db.prepare("UPDATE accounts SET channels = ?, followed = ? WHERE id = ?").run(JSON.stringify(list), list.length ? 1 : 0, a.id);
+  }
+  db.prepare("DELETE FROM accounts WHERE followed = 0 AND id NOT IN (SELECT DISTINCT account_id FROM videos)").run();
+  return true;
+}
+
+export function parseChannels(v: string | null | undefined): string[] {
+  try {
+    const x = JSON.parse(v || "[]");
+    return Array.isArray(x) ? x.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Suivre ou ne plus suivre un compte dans une chaîne ; `followed` = suivi dans au moins une chaîne. */
+export function setFollow(accountId: number, channelId: string, on: boolean): void {
+  const a = db.prepare("SELECT channels FROM accounts WHERE id = ?").get(accountId) as { channels: string } | undefined;
+  if (!a) return;
+  const set = new Set(parseChannels(a.channels));
+  if (on) set.add(channelId);
+  else set.delete(channelId);
+  db.prepare("UPDATE accounts SET channels = ?, followed = ?, updated_at = ? WHERE id = ?").run(JSON.stringify([...set]), set.size ? 1 : 0, now(), accountId);
+}
+
+/** Pseudos suivis par une chaîne. */
+export function followedHandles(channelId: string): string[] {
+  return (db.prepare("SELECT handle, channels FROM accounts WHERE followed = 1").all() as { handle: string; channels: string }[])
+    .filter((a) => parseChannels(a.channels).includes(channelId))
+    .map((a) => a.handle);
 }
 
 // ---- Upserts utilisés par les collecteurs ---------------------------------

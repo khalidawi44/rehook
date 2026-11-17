@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { db, getSettings, saveSettings, upsertAccount } from "../db.js";
+import { getSettings, saveSettings, setFollow, upsertAccount } from "../db.js";
 import { fetchTikTokProfile } from "../providers/tiktok-page.js";
 import { importUrls } from "../collector.js";
 import { removeDemo } from "../providers/demo.js";
@@ -42,7 +42,7 @@ export async function loadPack(name: string, log: (l: string) => void, replace =
       log(`pack : profil @${handle} : ${(e as Error).message}`);
     }
     const acc = upsertAccount(info);
-    db.prepare("UPDATE accounts SET followed = 1 WHERE id = ?").run(acc.id);
+    setFollow(acc.id, before.activeChannel, true);
     accounts++;
     await sleep(700);
   }

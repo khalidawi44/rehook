@@ -39,7 +39,7 @@ function record(video: VideoRow, kind: AlertRow["kind"], message: string, views:
     vph,
     now(),
   );
-  console.log("[niche] ALERTE", message);
+  console.log("[rehook] ALERTE", message);
   void sendTelegram(`${message}\n${video.url}`);
 }
 
@@ -116,7 +116,7 @@ export async function sendTelegram(text: string): Promise<void> {
       body: JSON.stringify({ chat_id: chat, text, disable_web_page_preview: false }),
     });
   } catch (e) {
-    console.warn("[niche] telegram :", (e as Error).message);
+    console.warn("[rehook] telegram :", (e as Error).message);
   }
 }
 

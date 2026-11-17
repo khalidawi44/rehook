@@ -2,7 +2,7 @@
 // - Découverte (toutes les N minutes) : comptes suivis, hashtags, mots-clés.
 // - Veille (toutes les 2 minutes par défaut) : relecture des compteurs des
 //   vidéos récentes, détection « ça explose », alertes.
-import { db, getSettings, now, upsertVideo, type AccountRow, type CollectedVideo, type VideoRow } from "./db.js";
+import { db, followedHandles, getSettings, now, upsertVideo, type CollectedVideo, type VideoRow } from "./db.js";
 import { cacheCover } from "./covers.js";
 import { detectAlert } from "./alerts.js";
 import { fetchTikTokVideo } from "./providers/tiktok-page.js";
@@ -35,7 +35,7 @@ export const log = (line: string) => {
   const stamp = new Date().toISOString().slice(11, 19);
   runState.log.push(`${stamp} ${line}`);
   if (runState.log.length > 300) runState.log.shift();
-  console.log("[niche]", line);
+  console.log("[rehook]", line);
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -47,7 +47,7 @@ export function discoveryMode(): "browser" | "apify" | "none" {
 
 async function discover(): Promise<CollectedVideo[]> {
   const settings = getSettings();
-  const followed = (db.prepare("SELECT * FROM accounts WHERE followed = 1").all() as AccountRow[]).map((a) => a.handle);
+  const followed = followedHandles(settings.activeChannel);
   const mode = discoveryMode();
   const per = settings.videosPerSource;
   const out: CollectedVideo[] = [];
@@ -150,9 +150,12 @@ export async function runCollection(opts: { discover?: boolean; refresh?: boolea
     let alerts = 0;
     if (opts.discover ?? true) {
       runState.step = "découverte";
+      const channel = getSettings().activeChannel;
       const found = await discover();
       for (const cv of found) {
         const { video, isNew } = upsertVideo(cv);
+        // Les vidéos propres à la chaîne (comptes, hashtags, recherches) portent son identifiant ; le fil Explorer reste partagé.
+        if (cv.source !== "explore" && !video.channel_id) db.prepare("UPDATE videos SET channel_id = ? WHERE id = ?").run(channel, video.id);
         seen++;
         if (isNew) added++;
         if (detectAlert(video, isNew)) alerts++;
@@ -207,6 +210,7 @@ export async function importUrls(urls: string[]): Promise<{ ok: number; errors: 
     try {
       const cv = await fetchTikTokVideo(u, "import");
       const { video, isNew } = upsertVideo(cv);
+      if (!video.channel_id) db.prepare("UPDATE videos SET channel_id = ? WHERE id = ?").run(getSettings().activeChannel, video.id);
       detectAlert(video, isNew);
       await cacheCover(video);
       ids.push(video.id);

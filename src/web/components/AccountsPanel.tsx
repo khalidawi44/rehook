@@ -128,7 +128,7 @@ export const AccountsPanel: React.FC<{ notify: (m: string) => void; onChanged: (
                 </td>
                 <td className="p-3">{fmtNum(a.followers)}</td>
                 <td className="p-3">
-                  <button onClick={() => window.dispatchEvent(new CustomEvent("niche:goto-followed", { detail: a.id }))} className="rounded-lg border border-zinc-700 px-2 py-0.5 hover:bg-zinc-800" title="Voir toutes ses vidéos">
+                  <button onClick={() => window.dispatchEvent(new CustomEvent("rehook:goto-followed", { detail: a.id }))} className="rounded-lg border border-zinc-700 px-2 py-0.5 hover:bg-zinc-800" title="Voir toutes ses vidéos">
                     {a.videos} ▸
                   </button>
                 </td>

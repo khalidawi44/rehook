@@ -17,7 +17,7 @@ export const updateState: UpdateState = { phase: "idle", log: [], available: fal
 const log = (l: string) => {
   updateState.log.push(`${new Date().toISOString().slice(11, 19)} ${l}`);
   if (updateState.log.length > 100) updateState.log.shift();
-  console.log("[niche] mise à jour :", l);
+  console.log("[rehook] mise à jour :", l);
 };
 
 async function run(cmd: string, cwd = REPO): Promise<string> {
@@ -67,11 +67,11 @@ export async function applyUpdate(): Promise<void> {
       await run(`${npmCmd} install --no-audit --no-fund`, ROOT);
     }
     const lockHash = crypto.createHash("sha256").update(lockAfter).digest("hex").toUpperCase();
-    fs.writeFileSync(path.join(ROOT, "node_modules", ".niche-lock"), lockHash);
+    fs.writeFileSync(path.join(ROOT, "node_modules", ".rehook-lock"), lockHash);
     log("construction de l'interface");
     await run(`${npmCmd} run build`, ROOT);
     fs.mkdirSync(path.join(ROOT, "dist"), { recursive: true });
-    fs.writeFileSync(path.join(ROOT, "dist", ".niche-build"), head);
+    fs.writeFileSync(path.join(ROOT, "dist", ".rehook-build"), head);
     log("redémarrage");
     updateState.phase = "restarting";
     updateState.available = false;

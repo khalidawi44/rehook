@@ -6,6 +6,7 @@ import { MontagePanel } from "./components/MontagePanel";
 import { TrendsPanel } from "./components/TrendsPanel";
 import { IdeasPanel } from "./components/IdeasPanel";
 import { FeedPanel } from "./components/FeedPanel";
+import { ChannelSwitcher } from "./components/ChannelSwitcher";
 import { PlanningPanel } from "./components/PlanningPanel";
 import { VideoCard } from "./components/VideoCard";
 import { VideoModal } from "./components/VideoModal";
@@ -39,8 +40,8 @@ export const App: React.FC = () => {
       setAccountId(id);
       setTab("followed");
     };
-    window.addEventListener("niche:goto-followed", h);
-    return () => window.removeEventListener("niche:goto-followed", h);
+    window.addEventListener("rehook:goto-followed", h);
+    return () => window.removeEventListener("rehook:goto-followed", h);
   }, []);
   const [q, setQ] = useState("");
   const [stats, setStats] = useState<Stats | null>(null);
@@ -51,10 +52,10 @@ export const App: React.FC = () => {
   const [recreate, setRecreate] = useState<Card | null>(null);
   const [recreateTwist, setRecreateTwist] = useState("");
   const [zoomCard, setZoomCard] = useState<Card | null>(null);
-  const [zoom, setZoom] = useState<number>(() => Number(localStorage.getItem("niche.zoom") ?? 2));
+  const [zoom, setZoom] = useState<number>(() => Number(localStorage.getItem("rehook.zoom") ?? 2));
   const setZoomSaved = (z: number) => {
     setZoom(z);
-    localStorage.setItem("niche.zoom", String(z));
+    localStorage.setItem("rehook.zoom", String(z));
   };
   const [showSettings, setShowSettings] = useState(false);
   const [showImport, setShowImport] = useState(false);
@@ -78,7 +79,7 @@ export const App: React.FC = () => {
     try {
       const r = await api.updateCheck();
       if (r.error) notify("Vérification impossible : " + r.error);
-      else notify(r.available ? `Mise à jour disponible (${r.changes.length} changement(s))` : "Niche est à jour");
+      else notify(r.available ? `Mise à jour disponible (${r.changes.length} changement(s))` : "Rehook est à jour");
       loadStats();
     } catch (e) {
       notify((e as Error).message);
@@ -114,8 +115,8 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     const h = () => setTab("montage");
-    window.addEventListener("niche:goto-montage", h);
-    return () => window.removeEventListener("niche:goto-montage", h);
+    window.addEventListener("rehook:goto-montage", h);
+    return () => window.removeEventListener("rehook:goto-montage", h);
   }, []);
 
   const loadStats = useCallback(() => api.stats().then(setStats).catch((e: Error) => setError(e.message)), []);
@@ -132,7 +133,7 @@ export const App: React.FC = () => {
             const fresh = list.filter((a) => a.id > (lastAlertId.current ?? 0) && !a.seen);
             for (const a of fresh.slice(0, 3)) {
               if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-                const n = new Notification("Niche : ça explose", { body: a.message, tag: `niche-${a.id}` });
+                const n = new Notification("Rehook : ça explose", { body: a.message, tag: `rehook-${a.id}` });
                 n.onclick = () => window.open(a.video.url, "_blank");
               }
             }
@@ -220,7 +221,7 @@ export const App: React.FC = () => {
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-2 px-3 py-2 sm:gap-4 sm:px-4 sm:py-3">
           <div className="flex items-center gap-2">
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-green-500 text-lg font-black text-black">N</span>
-            <span className="text-xl font-bold tracking-tight">Niche</span>
+            <span className="text-xl font-bold tracking-tight">Rehook</span>
           </div>
           <div className="flex flex-wrap gap-2">
             <Stat value={stats?.viralToday} label="virales aujourd'hui" accent />
@@ -228,6 +229,7 @@ export const App: React.FC = () => {
             <Stat value={stats?.followed} label="comptes suivis" />
           </div>
           <div className="ml-auto flex items-center gap-2">
+            <ChannelSwitcher notify={notify} />
             <button onClick={() => setShowImport(true)} className="rounded-lg border border-zinc-700 px-3 py-2 text-sm hover:bg-zinc-800">
               <span className="sm:hidden">+ URL</span>
               <span className="hidden sm:inline">+ Importer une URL</span>
@@ -266,7 +268,7 @@ export const App: React.FC = () => {
                   : "Veille désactivée."}
             </span>
           ) : null}
-          {stats?.providers.autoExit ? <span className="text-zinc-500">Fermer cet onglet arrête Niche.</span> : null}
+          {stats?.providers.autoExit ? <span className="text-zinc-500">Fermer cet onglet arrête Rehook.</span> : null}
           {stats?.providers.updatable ? (
             stats.update.available ? (
               <button onClick={startUpdate} className="rounded bg-green-500 px-2 py-0.5 text-xs font-semibold text-black hover:bg-green-400" title={stats.update.changes.join("\n")}>

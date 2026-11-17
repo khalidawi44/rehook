@@ -1,4 +1,4 @@
-# Niche en conteneur : Node 22 + Chromium (image officielle Playwright, mêmes dépendances que Remotion).
+# Rehook en conteneur : Node 22 + Chromium (image officielle Playwright, mêmes dépendances que Remotion).
 FROM mcr.microsoft.com/playwright:v1.64.1-noble
 
 ENV NODE_ENV=production \

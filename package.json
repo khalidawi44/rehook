@@ -1,9 +1,9 @@
 {
-  "name": "niche",
+  "name": "rehook",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Niche : repère les vidéos TikTok virales et recrée une variante avec Remotion",
+  "description": "Rehook : repère les vidéos TikTok virales et recrée une variante avec Remotion",
   "scripts": {
     "dev": "concurrently -n api,web -c blue,green \"npm:dev:api\" \"npm:dev:web\"",
     "dev:api": "tsx watch src/server/index.ts",

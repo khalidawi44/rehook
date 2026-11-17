@@ -1,6 +1,6 @@
 // Calcul des indicateurs affichés sur chaque carte : vues/h, croissance,
 // engagement, et le verdict « viral ».
-import { db, getSettings, type AccountRow, type SnapshotRow, type VideoRow } from "./db.js";
+import { db, getSettings, activeChannelId, parseChannels, type AccountRow, type SnapshotRow, type VideoRow } from "./db.js";
 
 export type VideoMetrics = {
   views: number;
@@ -157,7 +157,7 @@ export function toCard(video: VideoRow, account: AccountRow, snaps: SnapshotRow[
       nickname: account.nickname,
       avatar: account.avatar_url,
       followers: account.followers,
-      followed: !!account.followed,
+      followed: parseChannels(account.channels).includes(activeChannelId()),
     },
     metrics: computeMetrics(video, snaps),
   };
@@ -181,9 +181,13 @@ export type ListQuery = {
  */
 export function feedCards(category: string, limit = 24): VideoCard[] {
   resetMedianCache();
-  const where = ["v.source <> 'demo'", "v.cover_url IS NOT NULL OR v.cover_file IS NOT NULL"];
-  const params: (string | number)[] = [];
-  if (category === "niche") where.push("(a.followed = 1 OR v.source IN ('hashtag', 'keyword', 'account', 'import'))");
+  const channel = activeChannelId();
+  const where = ["v.source <> 'demo'", "v.cover_url IS NOT NULL OR v.cover_file IS NOT NULL", "(v.channel_id IS NULL OR v.channel_id = ?)"];
+  const params: (string | number)[] = [channel];
+  if (category === "niche") {
+    where.push("(a.channels LIKE ? OR v.channel_id = ?)");
+    params.push(`%"${channel}"%`, channel);
+  }
   else if (category) {
     where.push("v.category = ?");
     params.push(category);
@@ -221,11 +225,18 @@ export function listCards(q: ListQuery): VideoCard[] {
   const periodS = { "24h": 86400, "3d": 3 * 86400, "7d": 7 * 86400, all: 0 }[q.period];
   const where: string[] = [];
   const params: (string | number)[] = [];
+  // Chaîne active : ses vidéos propres plus le fil partagé.
+  const channel = activeChannelId();
+  where.push("(v.channel_id IS NULL OR v.channel_id = ?)");
+  params.push(channel);
   if (periodS) {
     where.push("(v.posted_at IS NULL OR v.posted_at >= ?)");
     params.push(nowS - periodS);
   }
-  if (q.followed) where.push("a.followed = 1");
+  if (q.followed) {
+    where.push("a.followed = 1 AND a.channels LIKE ?");
+    params.push(`%"${channel}"%`);
+  }
   else if (!q.unfollowed) {
     // Sans « Comptes non suivis » : comptes suivis + vidéos trouvées par hashtag, recherche ou import.
     where.push("(a.followed = 1 OR v.source IN ('hashtag', 'keyword', 'import'))");
@@ -251,7 +262,7 @@ export function listCards(q: ListQuery): VideoCard[] {
   const rows = db
     .prepare(
       `SELECT v.*, a.id AS a_id, a.platform AS a_platform, a.handle AS a_handle, a.nickname AS a_nickname,
-              a.avatar_url AS a_avatar_url, a.followers AS a_followers, a.region AS a_region, a.followed AS a_followed,
+              a.avatar_url AS a_avatar_url, a.followers AS a_followers, a.region AS a_region, a.followed AS a_followed, a.channels AS a_channels,
               a.created_at AS a_created_at, a.updated_at AS a_updated_at
        FROM videos v JOIN accounts a ON a.id = v.account_id
        ${where.length ? "WHERE " + where.join(" AND ") : ""}`,
@@ -269,6 +280,7 @@ export function listCards(q: ListQuery): VideoCard[] {
       followers: r.a_followers as number | null,
       region: r.a_region as string | null,
       followed: r.a_followed as number,
+      channels: (r.a_channels as string) ?? "[]",
       created_at: r.a_created_at as number,
       updated_at: r.a_updated_at as number,
     };

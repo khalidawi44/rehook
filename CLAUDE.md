@@ -1,6 +1,6 @@
-# Règles du projet Niche
+# Règles du projet Rehook
 
-Niche est un outil personnel de veille TikTok, de recréation (Remotion) et de montage, orienté depuis le 17/11/2026 sur le lancement de GTA 6 (chaînes « Leonida Daily »). Projet indépendant : aucun lien avec les dépôts associatifs ou politiques du même compte GitHub.
+Rehook est un outil personnel de veille TikTok, de recréation (Remotion) et de montage, orienté depuis le 17/11/2026 sur le lancement de GTA 6 (chaînes « Leonida Daily »). Projet indépendant : aucun lien avec les dépôts associatifs ou politiques du même compte GitHub.
 
 ## Vérifier avant de livrer (règle absolue)
 - Ne jamais inventer un pseudo, un chiffre, une date, une règle de plateforme : vérifier sur la page publique (TikTok : `fetchTikTokProfile`), sinon le dire.

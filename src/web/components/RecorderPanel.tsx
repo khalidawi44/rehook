@@ -333,7 +333,7 @@ export const RecorderPanel: React.FC<{ notify: (m: string) => void }> = ({ notif
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom de l'enregistrement" className={inputCls + " max-w-xs"} />
               <button onClick={save} disabled={saving} className="rounded-lg bg-green-500 px-4 py-2 text-sm font-semibold text-black hover:bg-green-400 disabled:opacity-50">
-                {saving ? (saveProgress?.phase === "envoi" ? "Envoi…" : "Conversion…") : "Garder dans Niche (MP4)"}
+                {saving ? (saveProgress?.phase === "envoi" ? "Envoi…" : "Conversion…") : "Garder dans Rehook (MP4)"}
               </button>
               <a href={blobUrl} download={`${name || "capture"}.webm`} className="rounded-lg border border-zinc-700 px-4 py-2 text-sm hover:bg-zinc-800">
                 Télécharger le WebM

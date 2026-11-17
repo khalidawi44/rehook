@@ -107,7 +107,7 @@ async function resolveSource(src: ClipSource): Promise<string> {
     if (!c) throw new Error("Enregistrement introuvable : " + src.id);
     return path.join(CAPTURES_DIR, c.file);
   }
-  const f = path.join(RENDERS_DIR, `niche-${Number(src.id)}.mp4`);
+  const f = path.join(RENDERS_DIR, `rehook-${Number(src.id)}.mp4`);
   if (!fs.existsSync(f)) throw new Error("Rendu introuvable : " + src.id);
   return f;
 }
@@ -132,7 +132,7 @@ export async function montageSources() {
     )
     .all() as { id: number; caption: string; duration_s: number | null; cover_file: string | null; cover_url: string | null; posted_at: number | null; favorite: number; handle: string; followed: number; views: number | null }[];
   const renders = (db.prepare("SELECT id, brief, created_at FROM jobs WHERE status = 'done' AND output_file IS NOT NULL ORDER BY id DESC").all() as { id: number; brief: string | null; created_at: number }[])
-    .filter((j) => fs.existsSync(path.join(RENDERS_DIR, `niche-${j.id}.mp4`)))
+    .filter((j) => fs.existsSync(path.join(RENDERS_DIR, `rehook-${j.id}.mp4`)))
     .map((j) => {
       let title = `Recréation #${j.id}`;
       try {
@@ -616,7 +616,7 @@ export async function startMontage(req: MontageRequest): Promise<MontageJob> {
   jobs.set(id, job);
 
   (async () => {
-    const { files, audios } = await prepare(req, (l) => console.log("[niche] montage :", l));
+    const { files, audios } = await prepare(req, (l) => console.log("[rehook] montage :", l));
     const g = await buildGraph(req, files, audios, true);
     job.durationS = g.total;
     fs.mkdirSync(RENDERS_DIR, { recursive: true });
@@ -656,7 +656,7 @@ export async function startMontage(req: MontageRequest): Promise<MontageJob> {
         await coverImage(out, Math.max(0, Math.min(job.durationS - 0.1, req.cover.atS)), req.cover.title, path.join(RENDERS_DIR, coverName), req.subtitles?.style?.font || "Anton");
         job.coverUrl = `/renders/${coverName}`;
       } catch (e) {
-        console.warn("[niche] couverture :", (e as Error).message);
+        console.warn("[rehook] couverture :", (e as Error).message);
       }
     }
     job.progress = 1;
@@ -664,7 +664,7 @@ export async function startMontage(req: MontageRequest): Promise<MontageJob> {
   })().catch((e) => {
     job.status = "error";
     job.error = (e as Error).message;
-    console.error("[niche] montage :", job.error);
+    console.error("[rehook] montage :", job.error);
   });
 
   return job;

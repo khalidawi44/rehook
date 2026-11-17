@@ -1,7 +1,7 @@
-# Niche sur un serveur : `docker compose up -d --build` depuis le dossier niche/deploy.
+# Rehook sur un serveur : `docker compose up -d --build` depuis le dossier rehook/deploy.
 # Caddy obtient le certificat HTTPS tout seul pour NICHE_DOMAIN (Let's Encrypt).
 services:
-  niche:
+  rehook:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
@@ -29,7 +29,7 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      - niche
+      - rehook
 
 volumes:
   caddy_data:

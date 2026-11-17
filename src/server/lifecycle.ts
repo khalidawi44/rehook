@@ -38,21 +38,21 @@ export function installLifecycle(app: express.Express) {
   app.get("/api/lifecycle", (_req, res) => res.json({ autoExit: autoExitEnabled(), clients: clients.size, busy: busy() }));
 
   if (!autoExitEnabled()) return;
-  console.log("[niche] arrêt automatique : le serveur s'arrête 2 min après la fermeture du dernier onglet");
+  console.log("[rehook] arrêt automatique : le serveur s'arrête 2 min après la fermeture du dernier onglet");
   setInterval(() => {
     const now = Date.now();
     for (const [id, t] of clients) if (now - t > 35_000) clients.delete(id);
     if (clients.size > 0) return;
     if (!everSeen) {
       if (now - started > FIRST_CLIENT_MS) {
-        console.log("[niche] aucun onglet ouvert depuis 5 min : arrêt");
+        console.log("[rehook] aucun onglet ouvert depuis 5 min : arrêt");
         process.exit(0);
       }
       return;
     }
     if (now - lastSeen < GRACE_MS) return;
     if (busy()) return;
-    console.log("[niche] plus aucun onglet depuis 2 min : arrêt");
+    console.log("[rehook] plus aucun onglet depuis 2 min : arrêt");
     process.exit(0);
   }, 10_000).unref();
 }

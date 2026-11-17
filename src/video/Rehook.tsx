@@ -14,9 +14,9 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import { FPS, HOOK_SECONDS, OUTRO_SECONDS, type NicheProps, type SceneProps, type Word } from "./types";
+import { FPS, HOOK_SECONDS, OUTRO_SECONDS, type RehookProps, type SceneProps, type Word } from "./types";
 
-const FONT = "NicheDisplay";
+const FONT = "RehookDisplay";
 
 function useDisplayFont() {
   const [handle] = useState(() => delayRender("Police d'affichage"));
@@ -287,7 +287,7 @@ const Outro: React.FC<{ cta: string; handle: string; palette: string[] }> = ({ c
   );
 };
 
-export const Niche: React.FC<NicheProps> = (props) => {
+export const Rehook: React.FC<RehookProps> = (props) => {
   useDisplayFont();
   const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();

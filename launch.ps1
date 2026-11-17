@@ -1,17 +1,17 @@
-# Lanceur Niche (Windows), lance par Niche.cmd sans fenetre.
+# Lanceur Rehook (Windows), lance par Rehook.cmd sans fenetre.
 # 1. met a jour le code depuis GitHub, 2. installe ce qui manque, 3. construit l'interface,
 # 4. demarre le serveur en arriere-plan, 5. ouvre le navigateur des que l'API repond.
-# Tout est journalise dans data\niche.log. Arreter-Niche.cmd arrete le serveur.
+# Tout est journalise dans data\rehook.log. Arreter-Rehook.cmd arrete le serveur.
 $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $here
 $port = 3001
 $url = "http://localhost:$port"
 New-Item -ItemType Directory -Force -Path "data" | Out-Null
-$log = Join-Path $here "data\niche.log"
+$log = Join-Path $here "data\rehook.log"
 $launcherLog = Join-Path $here "data\lanceur.log"
 "==== $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') lancement depuis $here" | Out-File -Append -Encoding utf8 $launcherLog
-Write-Host "Niche : lancement depuis $here (journal : $launcherLog)"
+Write-Host "Rehook : lancement depuis $here (journal : $launcherLog)"
 
 function Say($m) {
   $line = ("[{0}] {1}" -f (Get-Date -Format 'HH:mm:ss'), $m)
@@ -34,7 +34,7 @@ function Run([string]$commandLine) {
 function Fail($m) {
   Say ("ERREUR : " + $m)
   Add-Type -AssemblyName System.Windows.Forms
-  [System.Windows.Forms.MessageBox]::Show("$m`n`nDetails dans :`n$launcherLog", "Niche", "OK", "Error") | Out-Null
+  [System.Windows.Forms.MessageBox]::Show("$m`n`nDetails dans :`n$launcherLog", "Rehook", "OK", "Error") | Out-Null
   exit 1
 }
 
@@ -45,20 +45,20 @@ function ApiUp() {
   try { $r = Invoke-WebRequest -UseBasicParsing "$url/api/stats" -TimeoutSec 2; return ($r.StatusCode -eq 200) } catch { return $false }
 }
 
-# Raccourci « Niche » sur le Bureau, toujours pointe vers CE dossier (un vieux raccourci vers un
+# Raccourci « Rehook » sur le Bureau, toujours pointe vers CE dossier (un vieux raccourci vers un
 # ancien emplacement lancait une autre copie).
 function RefreshShortcut() {
   try {
     $desktop = [Environment]::GetFolderPath("Desktop")
-    $lnk = Join-Path $desktop "Niche.lnk"
-    $target = Join-Path $here "Niche.cmd"
+    $lnk = Join-Path $desktop "Rehook.lnk"
+    $target = Join-Path $here "Rehook.cmd"
     $shell = New-Object -ComObject WScript.Shell
     $sc = $shell.CreateShortcut($lnk)
     if ($sc.TargetPath -ne $target) {
       $sc.TargetPath = $target
       $sc.WorkingDirectory = $here
-      $sc.Description = "Niche : veille TikTok et montage"
-      $icon = Join-Path $here "public\icons\niche.ico"
+      $sc.Description = "Rehook : veille TikTok et montage"
+      $icon = Join-Path $here "public\icons\rehook.ico"
       if (Test-Path $icon) { $sc.IconLocation = $icon }
       $sc.Save()
       Say "Raccourci du Bureau mis a jour : $lnk -> $target"
@@ -103,7 +103,7 @@ try {
   # Deja en route et a jour : on ouvre juste le navigateur.
   $running = Listening
   if ($running -and -not $updated -and (ApiUp)) {
-    Say "Niche tourne deja : ouverture du navigateur."
+    Say "Rehook tourne deja : ouverture du navigateur."
     Start-Process $url
     return
   }
@@ -115,7 +115,7 @@ try {
 
   # Dependances : reinstallees quand package-lock.json a change (marqueur dans node_modules).
   $lockHash = (Get-FileHash package-lock.json -Algorithm SHA256).Hash
-  $lockMarker = "node_modules\.niche-lock"
+  $lockMarker = "node_modules\.rehook-lock"
   $lockKnown = if (Test-Path $lockMarker) { (Get-Content $lockMarker -Raw).Trim() } else { "" }
   if ($updated -or -not (Test-Path "node_modules") -or $lockKnown -ne $lockHash) {
     Say "npm install..."
@@ -125,7 +125,7 @@ try {
   # Interface : reconstruite quand elle ne correspond pas au code courant (marqueur dans dist).
   $head = Git "rev-parse HEAD"
   $buildKey = "$head"
-  $buildMarker = "dist\.niche-build"
+  $buildMarker = "dist\.rehook-build"
   $buildKnown = if (Test-Path $buildMarker) { (Get-Content $buildMarker -Raw).Trim() } else { "" }
   if ($updated -or -not (Test-Path "dist\index.html") -or $buildKnown -ne $buildKey) {
     Say "npm run build..."
@@ -137,14 +137,14 @@ try {
   if (-not (Test-Path ".env")) {
     Copy-Item ".env.example" ".env"
     Add-Type -AssemblyName System.Windows.Forms
-    [System.Windows.Forms.MessageBox]::Show("Premier lancement : le fichier .env va s'ouvrir. Renseigne ANTHROPIC_API_KEY, enregistre, puis ferme le Bloc-notes.", "Niche", "OK", "Information") | Out-Null
+    [System.Windows.Forms.MessageBox]::Show("Premier lancement : le fichier .env va s'ouvrir. Renseigne ANTHROPIC_API_KEY, enregistre, puis ferme le Bloc-notes.", "Rehook", "OK", "Information") | Out-Null
     Start-Process -Wait notepad ".env"
   }
 
   Say "Demarrage du serveur (arret automatique 2 min apres la fermeture du dernier onglet)."
   $env:PORT = "$port"
   $env:NICHE_AUTO_EXIT = "1"
-  $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c npx tsx src/server/index.ts" -WindowStyle Hidden -PassThru -RedirectStandardOutput $log -RedirectStandardError (Join-Path $here "data\niche.err.log")
+  $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c npx tsx src/server/index.ts" -WindowStyle Hidden -PassThru -RedirectStandardOutput $log -RedirectStandardError (Join-Path $here "data\rehook.err.log")
   $null = $proc.Handle
   $ok = $false
   for ($i = 0; $i -lt 120; $i++) {
@@ -152,7 +152,7 @@ try {
     if (ApiUp) { $ok = $true; break }
     if ($proc.HasExited) { break }
   }
-  if (-not $ok) { Fail "Le serveur n'a pas demarre. Regarde data\niche.err.log." }
+  if (-not $ok) { Fail "Le serveur n'a pas demarre. Regarde data\rehook.err.log." }
   # Apres une mise a jour depuis l'outil, l'onglet deja ouvert se recharge tout seul : pas de nouvel onglet.
   if ($restart) { Say "Pret apres mise a jour (onglet existant)." } else { Say "Pret : ouverture de $url"; Start-Process $url }
   # Mise a jour depuis l'outil : le serveur relance ce lanceur lui-meme (NICHE_RESTART=1) puis s'arrete.
@@ -161,10 +161,10 @@ try {
   Say "Serveur arrete (code $code)."
   if ($code -ne 0 -and $code -ne 75 -and -not (Listening)) {
     $tail = ""
-    $errLog = Join-Path $here "data\niche.err.log"
+    $errLog = Join-Path $here "data\rehook.err.log"
     if (Test-Path $errLog) { $tail = ((Get-Content $errLog -Tail 12) -join "`n") }
     Add-Type -AssemblyName System.Windows.Forms
-    [System.Windows.Forms.MessageBox]::Show("Niche s'est arrete tout seul (code $code).`n`nDernieres erreurs :`n$tail`n`nJournal complet : $errLog", "Niche", "OK", "Warning") | Out-Null
+    [System.Windows.Forms.MessageBox]::Show("Rehook s'est arrete tout seul (code $code).`n`nDernieres erreurs :`n$tail`n`nJournal complet : $errLog", "Rehook", "OK", "Warning") | Out-Null
   }
 } catch {
   Fail $_.Exception.Message

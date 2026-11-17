@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Met Niche à jour depuis GitHub et reconstruit le conteneur s'il y a du nouveau.
+# Met Rehook à jour depuis GitHub et reconstruit le conteneur s'il y a du nouveau.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 BRANCH=$(git rev-parse --abbrev-ref HEAD)

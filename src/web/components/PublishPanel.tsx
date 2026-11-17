@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { api, type Channel, type Publication, type PublishSource, type Texts } from "../api";
+import { api, type PublishChannel as Channel, type Publication, type PublishSource, type Texts } from "../api";
 import { Field, Modal, inputCls } from "./Modal";
 
 const LANGS = [["fr", "Français"], ["en", "Anglais"], ["es", "Espagnol"], ["de", "Allemand"], ["it", "Italien"], ["pt", "Portugais"]];
@@ -217,7 +217,7 @@ export const PublishPanel: React.FC<{ source: PublishSource; title: string; onCl
                   </>
                 ) : (
                   <p className="text-sm text-zinc-400">
-                    Pour publier en un clic sur TikTok, Instagram, YouTube, X, Facebook et Threads, Niche passe par Postiz (postiz.com, ou auto-hébergé). Crée un compte, connecte tes réseaux, puis mets <code>POSTIZ_API_KEY</code> dans le fichier .env. Snapchat n'a pas d'API : partage depuis le téléphone.
+                    Pour publier en un clic sur TikTok, Instagram, YouTube, X, Facebook et Threads, Rehook passe par Postiz (postiz.com, ou auto-hébergé). Crée un compte, connecte tes réseaux, puis mets <code>POSTIZ_API_KEY</code> dans le fichier .env. Snapchat n'a pas d'API : partage depuis le téléphone.
                   </p>
                 )}
                 {pub?.sent.some((s) => s.status === "ok") ? (

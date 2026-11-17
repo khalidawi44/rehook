@@ -17,7 +17,7 @@ export const RecreateModal: React.FC<{ card: VideoCard; onClose: () => void; onQ
     language: "auto",
     targetSeconds: Math.min(90, Math.max(20, card.durationS ?? 45)),
     captionStyle: "karaoke",
-    handle: localStorage.getItem("niche.handle") ?? "",
+    handle: localStorage.getItem("rehook.handle") ?? "",
     twist: initialTwist ?? "",
     images: "",
     voice: "",
@@ -38,7 +38,7 @@ export const RecreateModal: React.FC<{ card: VideoCard; onClose: () => void; onQ
     setBusy(true);
     setError(null);
     try {
-      localStorage.setItem("niche.handle", opts.handle ?? "");
+      localStorage.setItem("rehook.handle", opts.handle ?? "");
       const clean: JobOptions = { ...opts };
       if (!clean.twist) delete clean.twist;
       if (!clean.images) delete clean.images;

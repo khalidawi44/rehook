@@ -136,7 +136,7 @@ const JobRow: React.FC<{ job: Job; open: boolean; toggle: () => void; reload: ()
                   <div className="rounded-xl border border-amber-700 bg-amber-500/10 p-3 text-amber-200">
                     <div className="font-semibold">🎬 Sketch à tourner</div>
                     <p className="text-sm">
-                      La source est jouée par des personnes : Niche te donne le script à filmer, plan par plan. La vidéo rendue ci-contre est une maquette (voix + texte) pour caler le rythme.
+                      La source est jouée par des personnes : Rehook te donne le script à filmer, plan par plan. La vidéo rendue ci-contre est une maquette (voix + texte) pour caler le rythme.
                     </p>
                     {brief.shootingTips ? <p className="mt-1 text-sm text-amber-100">{brief.shootingTips}</p> : null}
                   </div>

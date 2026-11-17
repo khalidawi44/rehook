@@ -3,7 +3,7 @@
 import type { ClipSource } from "./api";
 
 export type PendingClip = { source: ClipSource; name: string; url: string; durationS: number | null };
-const KEY = "niche.montage.pending";
+const KEY = "rehook.montage.pending";
 
 export function sendToMontage(item: PendingClip, go = true) {
   try {
@@ -13,7 +13,7 @@ export function sendToMontage(item: PendingClip, go = true) {
   } catch {
     // stockage indisponible
   }
-  if (go) window.dispatchEvent(new CustomEvent("niche:goto-montage"));
+  if (go) window.dispatchEvent(new CustomEvent("rehook:goto-montage"));
 }
 
 export function takePending(): PendingClip[] {

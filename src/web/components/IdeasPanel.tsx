@@ -4,7 +4,7 @@ import { inputCls } from "./Modal";
 
 /** Idées de vidéos à tourner, proposées par le modèle à partir des vidéos qui marchent. */
 export const IdeasPanel: React.FC<{ notify: (m: string) => void; onRecreate: (videoId: number, twist: string) => void; hasModel: boolean }> = ({ notify, onRecreate, hasModel }) => {
-  const [open, setOpen] = useState(() => localStorage.getItem("niche.ideas.open") === "1");
+  const [open, setOpen] = useState(() => localStorage.getItem("rehook.ideas.open") === "1");
   const [result, setResult] = useState<IdeasResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [days, setDays] = useState(7);
@@ -12,13 +12,13 @@ export const IdeasPanel: React.FC<{ notify: (m: string) => void; onRecreate: (vi
   const [theme, setTheme] = useState("");
   const [done, setDone] = useState<Record<string, boolean>>(() => {
     try {
-      return JSON.parse(localStorage.getItem("niche.ideas.done") ?? "{}");
+      return JSON.parse(localStorage.getItem("rehook.ideas.done") ?? "{}");
     } catch {
       return {};
     }
   });
   useEffect(() => {
-    localStorage.setItem("niche.ideas.open", open ? "1" : "0");
+    localStorage.setItem("rehook.ideas.open", open ? "1" : "0");
     if (open && !result) api.ideas().then((r) => setResult(r.result)).catch(() => {});
   }, [open, result]);
 
@@ -41,7 +41,7 @@ export const IdeasPanel: React.FC<{ notify: (m: string) => void; onRecreate: (vi
   const toggleDone = (key: string) => {
     const next = { ...done, [key]: !done[key] };
     setDone(next);
-    localStorage.setItem("niche.ideas.done", JSON.stringify(next));
+    localStorage.setItem("rehook.ideas.done", JSON.stringify(next));
   };
   const twistFor = (i: Idea) => `Idée à suivre : ${i.title}. Accroche : ${i.hook}. Format ${i.format}, ${i.durationS} s. Déroulé : ${i.script.join(" / ")}`;
 

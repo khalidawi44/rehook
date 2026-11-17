@@ -1,4 +1,4 @@
-// Client HTTP minimal vers l'API Niche.
+// Client HTTP minimal vers l'API Rehook.
 export type Metrics = {
   views: number;
   likes: number;
@@ -202,7 +202,7 @@ export type Publication = {
   texts: Texts | null;
   sent: { at: number; channel: string; provider: string; status: "ok" | "error"; detail: string; postId?: string; scheduledFor?: string }[];
 };
-export type Channel = { id: string; name: string; identifier: string; picture?: string; disabled?: boolean };
+export type PublishChannel = { id: string; name: string; identifier: string; picture?: string; disabled?: boolean };
 
 export type Pack = { name: string; title: string; description: string; accounts: number; hashtags: string[]; keywords?: string[]; videos: number };
 
@@ -214,12 +214,16 @@ export type Account = {
   followers: number | null;
   region: string | null;
   followed: number;
+  followedElsewhere?: number;
   videos: number;
   max_views: number | null;
   avg_views: number | null;
 };
 
+export type Channel = { id: string; name: string; hashtags: string[]; keywords: string[]; packLoaded: string; createdAt: number };
 export type Settings = {
+  channels: Channel[];
+  activeChannel: string;
   hashtags: string[];
   keywords: string[];
   viralMinViews: number;
@@ -314,6 +318,11 @@ export const api = {
   feed: (category: string, limit = 24) => req<{ cards: VideoCard[]; categories: { key: string; n: number; unseen: number }[] }>(`/api/feed?category=${encodeURIComponent(category)}&limit=${limit}`),
   feedSeen: (ids: number[]) => req<{ ok: boolean }>("/api/feed/seen", { method: "POST", body: JSON.stringify({ ids }) }),
   feedReset: () => req<{ ok: boolean; n: number }>("/api/feed/reset", { method: "POST", body: "{}" }),
+  channels: () => req<{ channels: Channel[]; active: string }>("/api/channels"),
+  createChannel: (name: string, pack?: string) => req<{ channel: Channel; channels: Channel[]; active: string }>("/api/channels", { method: "POST", body: JSON.stringify({ name, pack }) }),
+  activateChannel: (id: string) => req<{ channels: Channel[]; active: string }>(`/api/channels/${encodeURIComponent(id)}/activate`, { method: "POST", body: "{}" }),
+  renameChannel: (id: string, name: string) => req<{ channels: Channel[]; active: string }>(`/api/channels/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify({ name }) }),
+  deleteChannel: (id: string) => req<{ channels: Channel[]; active: string }>(`/api/channels/${encodeURIComponent(id)}`, { method: "DELETE" }),
   bulkAccounts: (action: "delete" | "keep" | "unfollow", ids: number[]) => req<{ ok: boolean; changes: number }>("/api/accounts/bulk", { method: "POST", body: JSON.stringify({ action, ids }) }),
   ideas: () => req<{ running: boolean; result: IdeasResult | null }>("/api/ideas"),
   generateIdeas: (opts: { days: number; count: number; theme: string }) => req<IdeasResult>("/api/ideas", { method: "POST", body: JSON.stringify(opts) }),
@@ -378,7 +387,7 @@ export const api = {
   publication: (source: PublishSource) => req<Publication>("/api/publish/get", { method: "POST", body: JSON.stringify({ source }) }),
   publishTexts: (source: PublishSource, o: { hint: string; extra: string; language: string }) => req<Publication>("/api/publish/texts", { method: "POST", body: JSON.stringify({ source, ...o }) }),
   savePublication: (key: string, texts: Texts) => req<Publication>(`/api/publish/${key}`, { method: "PUT", body: JSON.stringify({ texts }) }),
-  publishChannels: () => req<{ enabled: boolean; channels: Channel[]; error?: string }>("/api/publish/channels"),
+  publishChannels: () => req<{ enabled: boolean; channels: PublishChannel[]; error?: string }>("/api/publish/channels"),
   publishSend: (key: string, channels: string[], when: string | null) => req<Publication["sent"]>(`/api/publish/${key}/send`, { method: "POST", body: JSON.stringify({ channels, when }) }),
   montageSources: () => req<MontageSources>("/api/montage/sources"),
   silences: (source: ClipSource, inS: number, outS: number, thresholdDb = -32, minSilenceS = 0.45) =>

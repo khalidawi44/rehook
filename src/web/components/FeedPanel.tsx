@@ -11,9 +11,9 @@ export const FeedPanel: React.FC<{
 }> = ({ notify, onOpen, onRecreate, onChanged }) => {
   const [cards, setCards] = useState<VideoCard[]>([]);
   const [cats, setCats] = useState<{ key: string; n: number; unseen: number }[]>([]);
-  const [category, setCategory] = useState(() => localStorage.getItem("niche.feed.cat") ?? "");
+  const [category, setCategory] = useState(() => localStorage.getItem("rehook.feed.cat") ?? "");
   const [loading, setLoading] = useState(false);
-  const [muted, setMuted] = useState(() => localStorage.getItem("niche.feed.muted") !== "0");
+  const [muted, setMuted] = useState(() => localStorage.getItem("rehook.feed.muted") !== "0");
   const [current, setCurrent] = useState(0);
   const [failed, setFailed] = useState<Record<number, boolean>>({});
   const box = useRef<HTMLDivElement>(null);
@@ -43,7 +43,7 @@ export const FeedPanel: React.FC<{
     [category, notify],
   );
   useEffect(() => {
-    localStorage.setItem("niche.feed.cat", category);
+    localStorage.setItem("rehook.feed.cat", category);
     load(false);
   }, [category, load]);
 
@@ -86,7 +86,7 @@ export const FeedPanel: React.FC<{
     el.scrollTo({ top: i * el.clientHeight, behavior: "smooth" });
   };
   useEffect(() => {
-    localStorage.setItem("niche.feed.muted", muted ? "1" : "0");
+    localStorage.setItem("rehook.feed.muted", muted ? "1" : "0");
   }, [muted]);
 
   const patch = (id: number, p: Partial<VideoCard>) => setCards((cs) => cs.map((c) => (c.id === id ? { ...c, ...p } : c)));

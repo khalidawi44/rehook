@@ -63,7 +63,7 @@ Même pseudo, même avatar, même bio, mêmes liens entre elles. Un seul e-mail 
 8. **Twitch** (compte existant) : renommer au pseudo de la marque si possible (Paramètres, Profil, nom d'utilisateur), bannière, panneaux, écran hors ligne, catégorie « Grand Theft Auto VI » dès qu'elle existe, sinon « Just Chatting » pour les veillées.
 9. **Kick** (optionnel, 10 min) : même pseudo, pour rediffuser le live sans règle d'exclusivité.
 
-Puis dans Niche : onglet Planning, bouton Publier partout, connecter chaque chaîne dans Postiz une fois pour toutes.
+Puis dans Rehook : onglet Planning, bouton Publier partout, connecter chaque chaîne dans Postiz une fois pour toutes.
 
 ## 5. Ce qu'on publie : 5 piliers, 6 formats
 
@@ -75,7 +75,7 @@ Formats courts (TikTok, Reels, Shorts, Spotlight, 15 à 45 s, vertical, sous-tit
 3. Compte à rebours : visuel J-2, J-1, J, un par jour.
 4. « Tu savais que » : un détail de Leonida, une anecdote vérifiée.
 5. Clip de jeu commenté (dès le 19) : 30 s d'un moment fort avec ta voix.
-6. Duo ou réponse à une vidéo virale (Niche te les trouve dans l'onglet Fil et Viral).
+6. Duo ou réponse à une vidéo virale (Rehook te les trouve dans l'onglet Fil et Viral).
 
 Formats longs (YouTube) : « Découverte de Leonida » épisodes de 15 à 25 min, montés depuis les lives ; « Astuces » de 5 à 8 min.
 
@@ -92,7 +92,7 @@ Sur X : 2 hashtags maximum (#GTA6 #GTAVI). Sur YouTube : dans la description, pa
 |---|---|
 | Mar 17 (J-2) | Créer toutes les chaînes. Post « J-2 » partout (visuel fourni) + présentation face caméra 20 s : « GTA 6 sort jeudi, je vous raconte tout, tous les jours ». Premier live Twitch le soir, 21 h : « J-2, on prépare le lancement », Just Chatting, 1 h. |
 | Mer 18 (J-1) | Visuel « J-1 ». Vidéo « 3 choses à vérifier avant minuit » (préchargement, espace disque, mise à jour console). Surveiller l'heure de déblocage sur X. Live « Veillée de lancement » dès 21 h jusqu'au déblocage ou minuit. |
-| Jeu 19 (J) | Dès le déblocage : live « Premiers pas à Leonida » (console vers Twitch, voir partie 7), 3 h minimum. Pendant le live : 3 clips courts coupés et publiés avec Niche (montage, puis Publier partout). Le soir : Short « Mes 3 premières surprises ». |
+| Jeu 19 (J) | Dès le déblocage : live « Premiers pas à Leonida » (console vers Twitch, voir partie 7), 3 h minimum. Pendant le live : 3 clips courts coupés et publiés avec Rehook (montage, puis Publier partout). Le soir : Short « Mes 3 premières surprises ». |
 | Ven 20 | Live 2 h. Vidéo YouTube épisode 1 (montée depuis le live du 19). 3 TikTok : réaction, astuce, moment fort. |
 | Sam 21, Dim 22 | Lives longs (3 à 4 h) : week-end de lancement, audience maximale. 2 à 3 courts par jour, épisode 2 le dimanche. |
 | Lun 23 au Ven 27 | Rythme de croisière : 1 live par soir 20 h 30, 2 courts par jour, 1 épisode YouTube tous les deux jours, 1 « astuce » par jour. Sondage communauté le mercredi. |
@@ -121,11 +121,11 @@ Le jeu tourne sur console uniquement. Trois montages possibles, du plus simple a
 
 Titre des lives (Twitch, YouTube) : « 🔴 GTA 6 : premiers pas à Leonida, jour 1 (FR) ». Catégorie Grand Theft Auto VI, étiquettes Français, Découverte, Première fois. Dans la description : « Chaîne de fan, sans lien avec Rockstar. Pas de spoilers de l'histoire principale sans prévenir dans le chat. »
 
-Pendant chaque live : noter les minutes des moments forts (une feuille, ou le chat), pour couper 3 clips courts juste après avec Niche (onglet Montage, import du fichier, sous-titres automatiques, Publier partout).
+Pendant chaque live : noter les minutes des moments forts (une feuille, ou le chat), pour couper 3 clips courts juste après avec Rehook (onglet Montage, import du fichier, sous-titres automatiques, Publier partout).
 
-## 8. Niche, réglé pour GTA 6
+## 8. Rehook, réglé pour GTA 6
 
-Au prochain lancement de `E:\GitHub\niche\Niche.cmd` :
+Au prochain lancement de `E:\GitHub\niche\Rehook.cmd` :
 - les anciens comptes suivis sont retirés (sauf @galeriedesconneries), @rockstargames est suivi, les hashtags et recherches passent sur GTA 6 ;
 - l'onglet Fil (catégorie Jeux) et l'onglet Viral te montrent ce qui explose ; bouton « Suivre » sur les créateurs GTA que tu croises, « Enregistrer » pour les idées ;
 - le panneau « Idées de vidéos à tourner » propose des sujets à partir de ce qui marche (clé Anthropic dans `.env`) ;

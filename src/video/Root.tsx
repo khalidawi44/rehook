@@ -1,9 +1,9 @@
 import React from "react";
 import { Composition } from "remotion";
-import { Niche } from "./Niche";
-import { FPS, HEIGHT, WIDTH, totalFrames, type NicheProps } from "./types";
+import { Rehook } from "./Rehook";
+import { FPS, HEIGHT, WIDTH, totalFrames, type RehookProps } from "./types";
 
-const DEMO_PROPS: NicheProps = {
+const DEMO_PROPS: RehookProps = {
   title: "Le facteur qui livrait des lettres au futur",
   hook: "Il a ouvert la lettre 40 ans trop tôt",
   language: "fr",
@@ -51,8 +51,8 @@ const DEMO_PROPS: NicheProps = {
 export const Root: React.FC = () => {
   return (
     <Composition
-      id="Niche"
-      component={Niche}
+      id="Rehook"
+      component={Rehook}
       durationInFrames={totalFrames(DEMO_PROPS)}
       fps={FPS}
       width={WIDTH}

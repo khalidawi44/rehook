@@ -1,4 +1,4 @@
-// Props de la composition « Niche » (partagées entre le serveur et Remotion).
+// Props de la composition « Rehook » (partagées entre le serveur et Remotion).
 export type Word = { text: string; start: number; end: number };
 
 export type SceneProps = {
@@ -13,7 +13,7 @@ export type SceneProps = {
   words: Word[];
 };
 
-export type NicheProps = {
+export type RehookProps = {
   title: string;
   hook: string;
   language: string;
@@ -33,7 +33,7 @@ export const HEIGHT = 1920;
 export const HOOK_SECONDS = 1.6;
 export const OUTRO_SECONDS = 2.5;
 
-export function totalFrames(p: NicheProps): number {
+export function totalFrames(p: RehookProps): number {
   const scenes = p.scenes.reduce((a, s) => a + s.durationS, 0);
   const total = (p.showHookCard ? HOOK_SECONDS : 0) + scenes + OUTRO_SECONDS;
   return Math.max(FPS * 3, Math.round(total * FPS));

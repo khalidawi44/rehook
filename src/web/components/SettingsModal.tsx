@@ -138,7 +138,7 @@ export const SettingsModal: React.FC<{ stats: Stats | null; onClose: () => void;
             <p className="text-xs text-zinc-500">Aucune adresse réseau trouvée.</p>
           )}
           <p className="mt-2 text-xs text-zinc-500">
-            Scanne le code avec l'appareil photo du téléphone, puis « Ajouter à l'écran d'accueil » (bouton Partager sur iPhone, menu ⋮ sur Android) : Niche s'ouvre en plein écran avec son icône. Le PC doit rester allumé avec Niche lancé. Si rien ne s'affiche, autorise Node.js dans le pare-feu Windows (réseau privé).
+            Scanne le code avec l'appareil photo du téléphone, puis « Ajouter à l'écran d'accueil » (bouton Partager sur iPhone, menu ⋮ sur Android) : Rehook s'ouvre en plein écran avec son icône. Le PC doit rester allumé avec Rehook lancé. Si rien ne s'affiche, autorise Node.js dans le pare-feu Windows (réseau privé).
           </p>
         </div>
         <div className="rounded-xl border border-zinc-800 p-3 text-xs text-zinc-400">

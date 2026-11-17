@@ -4,7 +4,7 @@ import path from "node:path";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import { PUBLIC_DIR, RENDERS_DIR, VIDEO_ENTRY } from "../paths.js";
-import type { NicheProps } from "../../video/types.js";
+import type { RehookProps } from "../../video/types.js";
 
 let serveUrlPromise: Promise<string> | null = null;
 
@@ -21,15 +21,15 @@ function getBundle(log: (l: string) => void): Promise<string> {
 
 export async function renderVideo(
   jobId: number,
-  props: NicheProps,
+  props: RehookProps,
   log: (l: string) => void,
   onProgress: (p: number) => void,
 ): Promise<string> {
   fs.mkdirSync(RENDERS_DIR, { recursive: true });
   const serveUrl = await getBundle(log);
   const browserExecutable = process.env.REMOTION_BROWSER_EXECUTABLE || undefined;
-  const composition = await selectComposition({ serveUrl, id: "Niche", inputProps: props, browserExecutable });
-  const outputLocation = path.join(RENDERS_DIR, `niche-${jobId}.mp4`);
+  const composition = await selectComposition({ serveUrl, id: "Rehook", inputProps: props, browserExecutable });
+  const outputLocation = path.join(RENDERS_DIR, `rehook-${jobId}.mp4`);
   log(`rendu : ${composition.durationInFrames} images à ${composition.fps} i/s`);
   let last = 0;
   await renderMedia({

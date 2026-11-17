@@ -32,7 +32,7 @@ export const VideoModal: React.FC<{
   }, [card.id]);
   const m = card.metrics;
   const remove = async () => {
-    if (!confirm("Retirer cette vidéo de Niche ?")) return;
+    if (!confirm("Retirer cette vidéo de Rehook ?")) return;
     await api.deleteVideo(card.id);
     onDeleted();
   };

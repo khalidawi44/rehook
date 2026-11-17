@@ -65,7 +65,7 @@ L'outil actuel est un outil personnel (un seul utilisateur, un mot de passe, tou
 5. **Droits** : musiques libres de droits sous licence claire (bibliothèque fournie), clips Pixabay et Pexels (licences compatibles), modèles d'IA et voix avec conditions d'usage commercial.
 6. **Garde-fous** : pas de téléchargement de la vidéo d'autrui pour la republier telle quelle (l'outil sert à refaire, pas à voler), filigrane en gratuit, signalement.
 7. **Mesure** : événements d'usage (activation, première recréation, première publication), tableau de bord fondateur.
-8. **Renommage** : « Niche » devient Rehooked partout (interface, lanceur, PWA, dépôt). L'ancien lanceur Windows reste un mode « local » pour les utilisateurs avancés.
+8. **Renommage** : « Rehook » devient Rehooked partout (interface, lanceur, PWA, dépôt). L'ancien lanceur Windows reste un mode « local » pour les utilisateurs avancés.
 
 ## 6. Le design
 
@@ -82,7 +82,7 @@ Direction : **sombre, net, une seule couleur d'accent**. L'interface actuelle (z
 | Étape | Quand | Quoi |
 |---|---|---|
 | 0. Vitrine | semaine du 17/11 | Dépôt public `rehooked`, nom et domaines réservés, page d'accueil (promesse, 3 captures, liste d'attente par e-mail), Leonida Daily publie « fait avec Rehooked » |
-| 1. Renommage et base produit | 2 semaines | Niche devient Rehooked, nettoyage du code, tests d'export, documentation, licence (code source public sous licence qui interdit la revente du service : voir ci-dessous) |
+| 1. Renommage et base produit | 2 semaines | Rehook devient Rehooked, nettoyage du code, tests d'export, documentation, licence (code source public sous licence qui interdit la revente du service : voir ci-dessous) |
 | 2. Hébergé multi-utilisateurs | 4 à 6 semaines | Comptes, espaces, Stripe, paliers, collecteur serveur avec cache partagé, file de rendus |
 | 3. Bêta payante | janvier 2027 | 20 créateurs gaming et humour, prix fondateur 9 €/mois à vie pour les 100 premiers, retours hebdomadaires |
 | 4. Lancement | février 2027 | Offres publiques, packs de niche, affiliation 30 % pour les créateurs qui recommandent |

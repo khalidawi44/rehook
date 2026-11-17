@@ -1,6 +1,6 @@
 // Service worker minimal : rend l'appli installable. Rien n'est mis en cache
 // (les données changent en permanence), sauf la coquille quand on est hors ligne.
-const SHELL = "niche-shell-v1";
+const SHELL = "rehook-shell-v1";
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(SHELL).then((c) => c.addAll(["/", "/manifest.webmanifest"]).catch(() => {})));
   self.skipWaiting();

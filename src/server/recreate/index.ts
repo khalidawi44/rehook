@@ -13,7 +13,7 @@ import { capturePath } from "../captures.js";
 import { translateBrief } from "../translate.js";
 import { makeVoices, voiceProvider } from "./voice.js";
 import { renderVideo } from "./render.js";
-import type { NicheProps } from "../../video/types.js";
+import type { RehookProps } from "../../video/types.js";
 
 export type BriefAnalysis = { frames: string[]; transcript: string | null; transcriptSource: string | null; stickers: string[] };
 
@@ -38,7 +38,7 @@ function update(id: number, patch: Partial<Pick<JobRow, "status" | "step" | "pro
   if (logLine) {
     sets.push("log = log || ?");
     params.push(`${new Date().toISOString().slice(11, 19)} ${logLine}\n`);
-    console.log(`[niche] tâche ${id} : ${logLine}`);
+    console.log(`[rehook] tâche ${id} : ${logLine}`);
   }
   sets.push("updated_at = ?");
   params.push(now());
@@ -99,7 +99,7 @@ function kick() {
 // Au démarrage, les tâches interrompues repartent ; et toutes les 30 s on vérifie
 // qu'aucune tâche en attente n'est oubliée.
 const resumed = db.prepare("UPDATE jobs SET status = 'queued', step = 'En attente', progress = 0 WHERE status = 'running'").run();
-if (Number(resumed.changes)) console.log(`[niche] ${resumed.changes} tâche(s) interrompue(s) remise(s) en file`);
+if (Number(resumed.changes)) console.log(`[rehook] ${resumed.changes} tâche(s) interrompue(s) remise(s) en file`);
 setTimeout(kick, 1000);
 setInterval(kick, 30_000);
 
@@ -183,7 +183,7 @@ async function runJob(job: JobRow) {
   if (opts.backgroundCapture && !background) log("fond : enregistrement introuvable, ignoré");
   if (background) log(`fond : enregistrement d'écran (${Math.round(background.durationS)} s) sur les scènes sans clip`);
   let bgOffset = 0;
-  const props: NicheProps = {
+  const props: RehookProps = {
     title: brief.title,
     hook: brief.hook,
     language: brief.language,

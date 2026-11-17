@@ -57,7 +57,7 @@ export async function generateIdeas(opts: { days?: number; count?: number; theme
       `${i + 1}. @${c.account.handle} · ${c.durationS ?? "?"} s · ${fmt(c.metrics.views)} vues · ${fmt(c.metrics.viewsPerHour ?? 0)} vues/h · engagement ${c.metrics.engagement?.toFixed(1) ?? "?"} %\n   Légende : ${(c.caption || "(vide)").slice(0, 220)}\n   Hashtags : ${c.hashtags.slice(0, 10).map((h) => "#" + h).join(" ") || "(aucun)"}${c.music ? `\n   Musique : ${c.music}` : ""}`,
   );
   const text = [
-    `Niche surveillée : hashtags ${settings.hashtags.map((h) => "#" + h).join(" ") || "(aucun)"}${settings.keywords.length ? ` ; recherches « ${settings.keywords.join(" », « ")} »` : ""}.`,
+    `Rehook surveillée : hashtags ${settings.hashtags.map((h) => "#" + h).join(" ") || "(aucun)"}${settings.keywords.length ? ` ; recherches « ${settings.keywords.join(" », « ")} »` : ""}.`,
     theme ? `Thème imposé pour les idées : ${theme}.` : "",
     `Vidéos qui marchent sur les ${days} derniers jours (${cards.length}) :`,
     lines.join("\n"),

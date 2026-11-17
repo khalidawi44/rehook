@@ -451,8 +451,8 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
   };
   useEffect(() => {
     const h = () => consumePending();
-    window.addEventListener("niche:goto-montage", h);
-    return () => window.removeEventListener("niche:goto-montage", h);
+    window.addEventListener("rehook:goto-montage", h);
+    return () => window.removeEventListener("rehook:goto-montage", h);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -550,7 +550,7 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
       h.future = [];
       h.last = cur;
       try {
-        localStorage.setItem("niche.montage.autosave", cur);
+        localStorage.setItem("rehook.montage.autosave", cur);
       } catch {
         // stockage indisponible
       }
@@ -590,7 +590,7 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
   useEffect(() => {
     api.projects().then(setProjects).catch(() => {});
     try {
-      const saved = localStorage.getItem("niche.montage.autosave");
+      const saved = localStorage.getItem("rehook.montage.autosave");
       if (saved && JSON.parse(saved).clips?.length) {
         restore(saved);
         historyRef.current.last = saved;
@@ -921,7 +921,7 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
           ? sources.renders.filter((r) => !q || r.name.toLowerCase().includes(q.toLowerCase())).map((r) => ({ ...r, durationS: null, cover: null }))
           : [];
   const removeFromLib = async (src: ClipSource, label: string) => {
-    if (!confirm(`Supprimer « ${label} » de Niche ?`)) return;
+    if (!confirm(`Supprimer « ${label} » de Rehook ?`)) return;
     try {
       if (src.kind === "video") await api.deleteVideo(Number(src.id));
       else if (src.kind === "capture") await api.deleteCapture(src.id);
@@ -1009,7 +1009,7 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
                   <li
                     key={s.id}
                     draggable
-                    onDragStart={(e) => e.dataTransfer.setData("application/niche-clip", JSON.stringify({ src, name: s.name, url: s.url, durationS: s.durationS }))}
+                    onDragStart={(e) => e.dataTransfer.setData("application/rehook-clip", JSON.stringify({ src, name: s.name, url: s.url, durationS: s.durationS }))}
                     onDoubleClick={() => add(src, s.name, s.url, s.durationS)}
                     className={`cursor-grab rounded-lg border border-zinc-800 p-1.5 hover:border-zinc-600 ${libBig ? "" : "flex items-center gap-2"}`}
                     title="Double-clic ou glisser vers la timeline"
@@ -1027,7 +1027,7 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
                       </div>
                       <div className="mt-1 flex gap-1">
                         <button onClick={() => add(src, s.name, s.url, s.durationS)} className="rounded-lg bg-green-500 px-2 py-0.5 text-xs font-semibold text-black hover:bg-green-400">+ Ajouter</button>
-                        <button onClick={() => removeFromLib(src, s.name)} className="rounded-lg border border-red-900 px-2 py-0.5 text-xs text-red-300 hover:bg-red-950" title="Supprimer de Niche">🗑</button>
+                        <button onClick={() => removeFromLib(src, s.name)} className="rounded-lg border border-red-900 px-2 py-0.5 text-xs text-red-300 hover:bg-red-950" title="Supprimer de Rehook">🗑</button>
                       </div>
                     </div>
                   </li>
@@ -1429,9 +1429,9 @@ export const MontagePanel: React.FC<{ notify: (m: string) => void }> = ({ notify
         </div>
         <div
           ref={trackRef}
-          onDragOver={(e) => { if (e.dataTransfer.types.includes("application/niche-clip")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } }}
+          onDragOver={(e) => { if (e.dataTransfer.types.includes("application/rehook-clip")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; } }}
           onDrop={(e) => {
-            const raw = e.dataTransfer.getData("application/niche-clip");
+            const raw = e.dataTransfer.getData("application/rehook-clip");
             if (!raw) return;
             e.preventDefault();
             const d = JSON.parse(raw) as { src: ClipSource; name: string; url: string; durationS: number | null };
