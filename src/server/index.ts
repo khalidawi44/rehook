@@ -834,11 +834,27 @@ function nettoyage() {
   log(`nettoyage : ${removed} vidéo(s) hors niche retirée(s), ${orphans} compte(s) sans vidéo retiré(s)`);
 }
 
+// Recentrage GTA 6 du 17/11/2026 (demande de Fabrice : « on reconstruit ça ») : ne garder que son
+// propre compte, passer la veille sur la sortie de GTA 6. Exécuté une seule fois.
+const RECENTRAGE_GTA6 = "recentrage-gta6-20261117";
+async function recentrageGta6() {
+  const keep = (process.env.NICHE_MY_HANDLE ?? "galeriedesconneries").replace(/^@/, "").toLowerCase();
+  const before = getSettings();
+  saveSettings({ hashtags: [], keywords: [], packLoaded: "", done: [...before.done, RECENTRAGE_GTA6] });
+  const removed = Number(db.prepare("DELETE FROM accounts WHERE lower(handle) <> ? AND followed = 1").run(keep).changes);
+  log(`recentrage GTA 6 : ${removed} compte(s) suivi(s) retiré(s) avec leurs vidéos, @${keep} conservé`);
+  const r = await loadPack("gta6", log, true);
+  console.log(`[niche] pack gta6 : ${r.accounts} compte(s)`);
+  scheduleRefresh();
+  await runCollection({ discover: true, refresh: false });
+  await runWatch();
+}
+
 const port = Number(process.env.PORT ?? 3001);
 app.listen(port, () => {
   console.log(`[niche] API sur http://localhost:${port}`);
   const count = (db.prepare("SELECT COUNT(*) AS n FROM videos").get() as { n: number }).n;
-  const pack = process.env.NICHE_PACK ?? "musique-viking,sexy-femme";
+  const pack = process.env.NICHE_PACK ?? "gta6";
   const settings = getSettings();
   scheduleRefresh();
   scheduleUpdateChecks();
@@ -850,7 +866,11 @@ app.listen(port, () => {
     }
   }
   if (!settings.done.includes(RECENTRAGE)) {
-    recentrage().catch((e) => console.error("[niche] recentrage :", (e as Error).message));
+    // Installation neuve : on marque les anciens recentrages comme faits et on passe direct à GTA 6.
+    saveSettings({ done: [...settings.done, RECENTRAGE, NETTOYAGE, RECENTRAGE_GTA6] });
+    recentrageGta6().catch((e) => console.error("[niche] recentrage GTA 6 :", (e as Error).message));
+  } else if (!settings.done.includes(RECENTRAGE_GTA6)) {
+    recentrageGta6().catch((e) => console.error("[niche] recentrage GTA 6 :", (e as Error).message));
   } else if (pack && !settings.packLoaded) {
     console.log(`[niche] premier lancement : chargement du pack ${pack} (comptes, hashtags, vidéos)…`);
     (async () => {
