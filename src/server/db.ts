@@ -318,6 +318,17 @@ export function createChannel(name: string): Channel {
   return ch;
 }
 
+/** Crée la chaîne si elle n'existe pas (sans changer la chaîne active) et renvoie son identifiant. */
+export function ensureChannel(name: string): string {
+  const s = getSettings();
+  const found = s.channels.find((c) => c.name === name || c.id === slugify(name));
+  if (found) return found.id;
+  const ch: Channel = { id: slugify(name), name, hashtags: [], keywords: [], packLoaded: "", createdAt: now() };
+  s.channels.push(ch);
+  writeSettings(s);
+  return ch.id;
+}
+
 export function setActiveChannel(id: string): boolean {
   const s = getSettings();
   if (!s.channels.some((c) => c.id === id)) return false;

@@ -20,7 +20,7 @@ function logCrash(kind: string, e: unknown) {
 process.on("unhandledRejection", (e) => logCrash("promesse rejetée", e));
 process.on("uncaughtException", (e) => logCrash("exception non rattrapée", e));
 import { z } from "zod";
-import { createChannel, db, deleteChannel, getSettings, listChannels, now, parseChannels, renameChannel, saveSettings, setActiveChannel, setFollow, upsertAccount, type AccountRow, type SnapshotRow, type VideoRow } from "./db.js";
+import { createChannel, db, deleteChannel, ensureChannel, getSettings, listChannels, now, parseChannels, renameChannel, saveSettings, setActiveChannel, setFollow, upsertAccount, type AccountRow, type SnapshotRow, type VideoRow } from "./db.js";
 import { feedCards, feedCategories, listCards, stats, toCard, type ListQuery } from "./metrics.js";
 import { discoveryMode, importUrls, log, runCollection, runState, runWatch, scheduleRefresh } from "./collector.js";
 import { listAlerts, markSeen, unseenCount } from "./alerts.js";
@@ -883,6 +883,33 @@ async function recentrageGta6() {
   await runWatch();
 }
 
+// Rangement du 17/11/2026 : la chaîne GTA 6 ne garde que du GTA. Le compte personnel et les anciennes
+// vidéos (humour, etc.) partent dans leur propre chaîne ; le pack GTA 6 (comptes vérifiés) est rechargé.
+const RANGEMENT = "rangement-chaines-20261117";
+async function rangementChaines() {
+  const s = getSettings();
+  saveSettings({ done: [...s.done, RANGEMENT] });
+  const gta = s.channels.find((c) => c.id === "gta-6");
+  if (!gta) return;
+  const mine = (process.env.NICHE_MY_HANDLE ?? "galeriedesconneries").replace(/^@/, "").toLowerCase();
+  const perso = ensureChannel("Galerie des conneries");
+  const acc = db.prepare("SELECT id FROM accounts WHERE lower(handle) = ?").get(mine) as { id: number } | undefined;
+  if (acc) {
+    setFollow(acc.id, "gta-6", false);
+    setFollow(acc.id, perso, true);
+    db.prepare("UPDATE videos SET channel_id = ? WHERE account_id = ?").run(perso, acc.id);
+  }
+  // Anciennes vidéos sans chaîne (relevées avant les chaînes), hors fil Explorer : dans la chaîne perso.
+  const moved = Number(db.prepare("UPDATE videos SET channel_id = ? WHERE channel_id IS NULL AND source <> 'explore' AND source <> 'demo'").run(perso).changes);
+  // Vidéos du fil Explorer déjà relevées : elles restent partagées (onglet Fil), rien à faire.
+  log(`rangement : @${mine} et ${moved} ancienne(s) vidéo(s) dans la chaîne « Galerie des conneries », chaîne GTA 6 nettoyée`);
+  setActiveChannel("gta-6");
+  const r = await loadPack("gta6", log);
+  log(`rangement : pack GTA 6 rechargé, ${r.accounts} compte(s) suivi(s)`);
+  scheduleRefresh();
+  runCollection({ discover: true, refresh: false }).catch(() => {});
+}
+
 const port = Number(process.env.PORT ?? 3001);
 app.listen(port, () => {
   console.log(`[rehook] API sur http://localhost:${port}`);
@@ -898,9 +925,12 @@ app.listen(port, () => {
       console.error("[rehook] nettoyage :", (e as Error).message);
     }
   }
+  if (settings.done.includes(RECENTRAGE_GTA6) && !settings.done.includes(RANGEMENT)) {
+    rangementChaines().catch((e) => console.error("[rehook] rangement :", (e as Error).message));
+  }
   if (!settings.done.includes(RECENTRAGE)) {
     // Installation neuve : on marque les anciens recentrages comme faits et on passe direct à GTA 6.
-    saveSettings({ done: [...settings.done, RECENTRAGE, NETTOYAGE, RECENTRAGE_GTA6] });
+    saveSettings({ done: [...settings.done, RECENTRAGE, NETTOYAGE, RECENTRAGE_GTA6, RANGEMENT] });
     recentrageGta6().catch((e) => console.error("[rehook] recentrage GTA 6 :", (e as Error).message));
   } else if (!settings.done.includes(RECENTRAGE_GTA6)) {
     recentrageGta6().catch((e) => console.error("[rehook] recentrage GTA 6 :", (e as Error).message));

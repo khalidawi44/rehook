@@ -225,9 +225,9 @@ export function listCards(q: ListQuery): VideoCard[] {
   const periodS = { "24h": 86400, "3d": 3 * 86400, "7d": 7 * 86400, all: 0 }[q.period];
   const where: string[] = [];
   const params: (string | number)[] = [];
-  // Chaîne active : ses vidéos propres plus le fil partagé.
+  // Chaîne active : uniquement ses vidéos propres (le fil partagé Explorer se lit dans l'onglet Fil).
   const channel = activeChannelId();
-  where.push("(v.channel_id IS NULL OR v.channel_id = ?)");
+  where.push("v.channel_id = ?");
   params.push(channel);
   if (periodS) {
     where.push("(v.posted_at IS NULL OR v.posted_at >= ?)");

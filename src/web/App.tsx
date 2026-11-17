@@ -220,8 +220,8 @@ export const App: React.FC = () => {
       <header className="sticky top-0 z-20 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-2 px-3 py-2 sm:gap-4 sm:px-4 sm:py-3">
           <div className="flex items-center gap-2">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-green-500 text-lg font-black text-black">N</span>
-            <span className="text-xl font-bold tracking-tight">Rehook</span>
+            <img src="/icons/rehook.svg" alt="" className="h-10 w-10 rounded-xl" />
+            <span className="brand-word text-2xl uppercase text-white">Rehook</span>
           </div>
           <div className="flex flex-wrap gap-2">
             <Stat value={stats?.viralToday} label="virales aujourd'hui" accent />
@@ -248,7 +248,7 @@ export const App: React.FC = () => {
           </div>
         </div>
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-2 px-3 pb-2 text-xs text-zinc-400 sm:px-4">
-          <span className={`h-2 w-2 rounded-full ${stats?.run.running ? "animate-pulse bg-amber-400" : "bg-green-500"}`} />
+          <span className={`h-2 w-2 rounded-full ${stats?.run.running ? "animate-pulse bg-amber-400" : "bg-emerald-500"}`} />
           {stats?.run.running ? (
             <span>Relevé en cours : {stats.run.step || "démarrage"}</span>
           ) : stats?.lastRun?.finished_at ? (
@@ -608,7 +608,7 @@ function beep() {
 
 const Stat: React.FC<{ value: number | undefined; label: string; accent?: boolean }> = ({ value, label, accent }) => (
   <div className="rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-1.5">
-    <div className={`text-lg font-bold leading-tight ${accent ? "text-green-400" : ""}`}>{value === undefined ? "…" : fmtNum(value)}</div>
+    <div className={`stat-num text-2xl leading-tight ${accent ? "text-green-400" : ""}`}>{value === undefined ? "…" : fmtNum(value)}</div>
     <div className="text-[11px] text-zinc-400">{label}</div>
   </div>
 );
