@@ -154,8 +154,8 @@ export async function runCollection(opts: { discover?: boolean; refresh?: boolea
       const found = await discover();
       for (const cv of found) {
         const { video, isNew } = upsertVideo(cv);
-        // Les vidéos propres à la chaîne (comptes, hashtags, recherches) portent son identifiant ; le fil Explorer reste partagé.
-        if (cv.source !== "explore" && !video.channel_id) db.prepare("UPDATE videos SET channel_id = ? WHERE id = ?").run(channel, video.id);
+        // Chaque chaîne est étanche : tout ce qu'elle relève (comptes, hashtags, recherches, fil Explorer) porte son identifiant.
+        if (!video.channel_id) db.prepare("UPDATE videos SET channel_id = ? WHERE id = ?").run(channel, video.id);
         seen++;
         if (isNew) added++;
         if (detectAlert(video, isNew)) alerts++;

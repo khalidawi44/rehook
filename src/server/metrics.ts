@@ -182,7 +182,7 @@ export type ListQuery = {
 export function feedCards(category: string, limit = 24): VideoCard[] {
   resetMedianCache();
   const channel = activeChannelId();
-  const where = ["v.source <> 'demo'", "v.cover_url IS NOT NULL OR v.cover_file IS NOT NULL", "(v.channel_id IS NULL OR v.channel_id = ?)"];
+  const where = ["v.source <> 'demo'", "v.cover_url IS NOT NULL OR v.cover_file IS NOT NULL", "v.channel_id = ?"];
   const params: (string | number)[] = [channel];
   if (category === "niche") {
     where.push("(a.channels LIKE ? OR v.channel_id = ?)");
@@ -211,11 +211,11 @@ export function feedCards(category: string, limit = 24): VideoCard[] {
 
 export function feedCategories(): { key: string; n: number; unseen: number }[] {
   const rows = db
-    .prepare("SELECT category AS key, COUNT(*) AS n, SUM(CASE WHEN seen_at IS NULL THEN 1 ELSE 0 END) AS unseen FROM videos WHERE source <> 'demo' AND category IS NOT NULL GROUP BY category ORDER BY n DESC")
-    .all() as { key: string; n: number; unseen: number }[];
+    .prepare("SELECT category AS key, COUNT(*) AS n, SUM(CASE WHEN seen_at IS NULL THEN 1 ELSE 0 END) AS unseen FROM videos WHERE source <> 'demo' AND category IS NOT NULL AND channel_id = ? GROUP BY category ORDER BY n DESC")
+    .all(activeChannelId()) as { key: string; n: number; unseen: number }[];
   const niche = db
-    .prepare("SELECT COUNT(*) AS n, SUM(CASE WHEN v.seen_at IS NULL THEN 1 ELSE 0 END) AS unseen FROM videos v JOIN accounts a ON a.id = v.account_id WHERE v.source <> 'demo' AND (a.followed = 1 OR v.source IN ('hashtag', 'keyword', 'account', 'import'))")
-    .get() as { n: number; unseen: number };
+    .prepare("SELECT COUNT(*) AS n, SUM(CASE WHEN v.seen_at IS NULL THEN 1 ELSE 0 END) AS unseen FROM videos v JOIN accounts a ON a.id = v.account_id WHERE v.source <> 'demo' AND v.channel_id = ? AND v.source IN ('hashtag', 'keyword', 'account', 'import')")
+    .get(activeChannelId()) as { n: number; unseen: number };
   return [{ key: "niche", n: niche.n, unseen: niche.unseen ?? 0 }, ...rows];
 }
 
@@ -308,9 +308,11 @@ export function listCards(q: ListQuery): VideoCard[] {
 export function stats() {
   resetMedianCache();
   const nowS = Math.floor(Date.now() / 1000);
-  const total = (db.prepare("SELECT COUNT(*) AS n FROM videos").get() as { n: number }).n;
-  const followed = (db.prepare("SELECT COUNT(*) AS n FROM accounts WHERE followed = 1").get() as { n: number }).n;
-  const accounts = (db.prepare("SELECT COUNT(*) AS n FROM accounts").get() as { n: number }).n;
+  // Compteurs de la chaîne active uniquement.
+  const ch = activeChannelId();
+  const total = (db.prepare("SELECT COUNT(*) AS n FROM videos WHERE channel_id = ?").get(ch) as { n: number }).n;
+  const followed = (db.prepare("SELECT COUNT(*) AS n FROM accounts WHERE followed = 1 AND channels LIKE ?").get(`%"${ch}"%`) as { n: number }).n;
+  const accounts = (db.prepare("SELECT COUNT(DISTINCT account_id) AS n FROM videos WHERE channel_id = ?").get(ch) as { n: number }).n;
   const viralToday = listCards({ view: "viral", period: "24h", duration: "all", sort: "score", unfollowed: true, q: "" }).length;
   const viralAll = listCards({ view: "viral", period: "7d", duration: "all", sort: "score", unfollowed: true, q: "" }).length;
   const lastRun = db.prepare("SELECT * FROM runs ORDER BY started_at DESC LIMIT 1").get() as

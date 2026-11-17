@@ -910,6 +910,31 @@ async function rangementChaines() {
   runCollection({ discover: true, refresh: false }).catch(() => {});
 }
 
+// Ménage du 17/11/2026 (demande de Fabrice) : la chaîne GTA 6 repart vierge. Tout ce qui a été relevé
+// avant (humour, glamour, fil varié) passe dans la chaîne « Galerie des conneries », avec ses anciens réglages.
+const MENAGE = "menage-gta6-vierge-20261117";
+function menageGta6() {
+  const s = getSettings();
+  saveSettings({ done: [...s.done, MENAGE] });
+  if (!s.channels.some((c) => c.id === "gta-6")) return;
+  const perso = ensureChannel("Galerie des conneries");
+  // Vidéos : tout sauf celles des comptes suivis par la chaîne GTA 6 (le compte personnel n'en fait pas partie).
+  const mine = (process.env.NICHE_MY_HANDLE ?? "galeriedesconneries").replace(/^@/, "").toLowerCase();
+  const gtaAccounts = `SELECT id FROM accounts WHERE channels LIKE '%"gta-6"%' AND lower(handle) <> ?`;
+  const moved = Number(db.prepare(`UPDATE videos SET channel_id = ? WHERE source <> 'demo' AND account_id NOT IN (${gtaAccounts})`).run(perso, mine).changes);
+  db.prepare(`UPDATE videos SET channel_id = 'gta-6' WHERE account_id IN (${gtaAccounts})`).run(mine);
+  // La chaîne perso retrouve les hashtags et recherches humour et glamour d'avant.
+  const after = getSettings();
+  const ch = after.channels.find((c) => c.id === perso);
+  if (ch && !ch.hashtags.length) {
+    const packs = listPacks().filter((p) => p.name === "humour-fr" || p.name === "sexy-femme");
+    ch.hashtags = [...new Set(packs.flatMap((p) => p.hashtags))];
+    ch.keywords = [...new Set(packs.flatMap((p) => p.keywords ?? []))];
+    saveSettings({ channels: after.channels });
+  }
+  log(`ménage : ${moved} vidéo(s) rangée(s) dans « Galerie des conneries », chaîne GTA 6 vierge`);
+}
+
 const port = Number(process.env.PORT ?? 3001);
 app.listen(port, () => {
   console.log(`[rehook] API sur http://localhost:${port}`);
@@ -925,12 +950,19 @@ app.listen(port, () => {
       console.error("[rehook] nettoyage :", (e as Error).message);
     }
   }
+  if (settings.done.includes(RECENTRAGE_GTA6) && !settings.done.includes(MENAGE)) {
+    try {
+      menageGta6();
+    } catch (e) {
+      console.error("[rehook] ménage :", (e as Error).message);
+    }
+  }
   if (settings.done.includes(RECENTRAGE_GTA6) && !settings.done.includes(RANGEMENT)) {
     rangementChaines().catch((e) => console.error("[rehook] rangement :", (e as Error).message));
   }
   if (!settings.done.includes(RECENTRAGE)) {
     // Installation neuve : on marque les anciens recentrages comme faits et on passe direct à GTA 6.
-    saveSettings({ done: [...settings.done, RECENTRAGE, NETTOYAGE, RECENTRAGE_GTA6, RANGEMENT] });
+    saveSettings({ done: [...settings.done, RECENTRAGE, NETTOYAGE, RECENTRAGE_GTA6, RANGEMENT, MENAGE] });
     recentrageGta6().catch((e) => console.error("[rehook] recentrage GTA 6 :", (e as Error).message));
   } else if (!settings.done.includes(RECENTRAGE_GTA6)) {
     recentrageGta6().catch((e) => console.error("[rehook] recentrage GTA 6 :", (e as Error).message));
