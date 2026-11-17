@@ -47,9 +47,13 @@ Dernière mise à jour : 17 novembre 2026.
 - Le lanceur Windows ne peut pas être exécuté dans l'environnement de développement : toute modification de `launch.ps1` se teste chez Fabrice avec `E:\REHOOK\Rehook-Diagnostic.cmd`.
 - Ne jamais lancer deux lanceurs en même temps (installation corrompue).
 
+- Problème signalé le 17/11/2026 au soir : la chaîne GTA 6 ne trouve aucune vidéo, y compris sur les comptes suivis (@rockstargames à 0). Un secours a été ajouté (lecture des liens de la grille du profil puis de chaque page vidéo). Cause exacte non établie : il faut les lignes « navigateur : » de `E:\REHOOK\data\rehook.log`.
+- Montage : Fabrice juge CapCut et l'éditeur TikTok meilleurs que le montage de Rehook et veut « exactement le même », sinon il utilise CapCut. Position donnée : Rehook ne rattrapera pas CapCut en montage ; voie proposée, à valider par Fabrice : Rehook pour trouver, préparer et publier, CapCut pour monter, avec un passage simple entre les deux.
+
 ## 6. À faire
 
 Côté Fabrice :
+0. **Rappel demandé pour le 18/11/2026** : créer le compte TikTok `leonidadaily` (décision : deux comptes, `@rehook.ai` pour le produit, `leonidadaily` pour GTA 6).
 1. Créer les comptes Leonida Daily avec rehook.ai@gmail.com : TikTok, YouTube (demander la vérification tout de suite, le direct s'active 24 h après), Instagram, X, Snapchat, Facebook, Threads, régler Twitch. Dire où `leonidadaily` est pris.
 2. Publier le visuel d'annonce (`branding/leonida-daily/`, à régénérer en « J-1 » ou « Jour J » selon le jour).
 3. Réserver un domaine (voir partie 4) et vérifier les marques.

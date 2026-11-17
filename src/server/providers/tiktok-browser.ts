@@ -3,7 +3,7 @@
 // Gratuit, mais TikTok peut demander une vérification : dans ce cas, le
 // collecteur rend 0 vidéo et le journal l'indique.
 import type { CollectedVideo } from "../db.js";
-import { BROWSER_UA, itemToVideo } from "./tiktok-page.js";
+import { BROWSER_UA, fetchTikTokVideo, itemToVideo } from "./tiktok-page.js";
 
 type Logger = (line: string) => void;
 
@@ -97,6 +97,33 @@ async function collectFromPages(
         log(`navigateur : ${target.url} : ${(e as Error).message}`);
       }
       page.off("response", handler);
+      // Secours : si la page a affiché des vidéos sans que leurs données aient été captées, on lit les liens
+      // de la grille puis la page publique de chaque vidéo (même lecture que « Importer une URL »).
+      if (items.size < Math.min(perPage, 6) && (target.source === "account" || target.source === "hashtag")) {
+        try {
+          const links = await page.evaluate(() => [...document.querySelectorAll("a[href*='/video/']")].map((a) => (a as HTMLAnchorElement).href));
+          const wantedHandle = target.handleHint?.toLowerCase();
+          const urls = [...new Set(links.map((l) => l.split("?")[0]))]
+            .filter((l) => /\/@[^/]+\/video\/\d+/.test(l))
+            .filter((l) => !wantedHandle || l.toLowerCase().includes(`/@${wantedHandle}/`))
+            .slice(0, Math.min(perPage, 30));
+          if (urls.length) log(`navigateur : ${target.url} : ${urls.length} lien(s) lus dans la page, lecture une par une`);
+          for (const u of urls) {
+            const id = u.match(/\/video\/(\d+)/)?.[1];
+            if (id && items.has(id)) continue;
+            try {
+              const v = await fetchTikTokVideo(u, target.source);
+              if (target.tag && !v.hashtags.includes(target.tag)) continue;
+              items.set(v.externalId, v);
+            } catch {
+              // vidéo illisible : on passe
+            }
+            await new Promise((r) => setTimeout(r, 600));
+          }
+        } catch (e) {
+          log(`navigateur : lecture des liens de ${target.url} : ${(e as Error).message}`);
+        }
+      }
       log(`navigateur : ${target.url} : ${items.size} vidéo(s)`);
       out.push(...[...items.values()].slice(0, perPage));
     }
