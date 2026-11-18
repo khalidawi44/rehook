@@ -50,6 +50,9 @@ Dernière mise à jour : 17 novembre 2026.
 - Problème signalé le 17/11/2026 au soir : la chaîne GTA 6 ne trouve aucune vidéo, y compris sur les comptes suivis (@rockstargames à 0). Un secours a été ajouté (lecture des liens de la grille du profil puis de chaque page vidéo). Cause exacte non établie : il faut les lignes « navigateur : » de `E:\REHOOK\data\rehook.log`.
 - Montage : Fabrice juge CapCut et l'éditeur TikTok meilleurs que le montage de Rehook et veut « exactement le même », sinon il utilise CapCut. Position donnée : Rehook ne rattrapera pas CapCut en montage ; **voie validée par Fabrice le 17/11/2026** : Rehook pour trouver, préparer et publier, CapCut pour monter. Boutons « Télécharger pour CapCut » (fiche vidéo, carte, fil, idées) et dépôt « Publier un montage CapCut » dans l'onglet Planning.
 
+- 18/11/2026 : la chaîne GTA 6 ne contenait que des vidéos du fil varié (sans rapport). Le fil varié est coupé pour cette chaîne et ces vidéos sont retirées. Les comptes suivis ne ramènent toujours rien chez Fabrice : cause non établie, impossible à reproduire dans l'environnement de développement (les tests contre TikTok y sont bloqués). Pistes : journal `E:\REHOOK\data\rehook.log`, ou le fournisseur de données Apify (`NICHE_DISCOVERY=apify` et jeton dans `.env`), déjà géré par le code.
+- 18/11/2026 : Fabrice veut garder le montage de Rehook pour finir une vidéo (logos, sous-titres, textes) : dans Planning, un fichier importé peut s'ouvrir dans le montage ou être publié tel quel.
+
 ## 6. À faire
 
 Côté Fabrice :

@@ -941,6 +941,16 @@ function menageGta6() {
   log(`ménage : ${moved} vidéo(s) rangée(s) dans « Galerie des conneries », chaîne GTA 6 vierge`);
 }
 
+// 18/11/2026 : le fil varié avait rempli la chaîne GTA 6 de vidéos sans rapport. On les retire, une fois.
+const SANS_FIL = "gta6-sans-fil-20261118";
+function gta6SansFil() {
+  const s = getSettings();
+  saveSettings({ done: [...s.done, SANS_FIL] });
+  const n = Number(db.prepare("DELETE FROM videos WHERE channel_id = 'gta-6' AND source = 'explore' AND favorite = 0").run().changes);
+  db.prepare("DELETE FROM accounts WHERE followed = 0 AND id NOT IN (SELECT DISTINCT account_id FROM videos)").run();
+  log(`chaîne GTA 6 : ${n} vidéo(s) du fil varié retirée(s)`);
+}
+
 const port = Number(process.env.PORT ?? 3001);
 app.listen(port, () => {
   console.log(`[rehook] API sur http://localhost:${port}`);
@@ -954,6 +964,13 @@ app.listen(port, () => {
       nettoyage();
     } catch (e) {
       console.error("[rehook] nettoyage :", (e as Error).message);
+    }
+  }
+  if (!settings.done.includes(SANS_FIL)) {
+    try {
+      gta6SansFil();
+    } catch (e) {
+      console.error("[rehook] sans fil :", (e as Error).message);
     }
   }
   if (settings.done.includes(RECENTRAGE_GTA6) && !settings.done.includes(MENAGE)) {

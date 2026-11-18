@@ -89,7 +89,9 @@ async function discover(): Promise<CollectedVideo[]> {
       break;
     }
   }
-  if (settings.feedEnabled) {
+  // Le fil varié (page Explorer) n'a de sens que pour une chaîne généraliste : pas pour une chaîne à sujet précis comme GTA 6.
+  const channelPack = settings.packLoaded.split(",")[0];
+  if (settings.feedEnabled && channelPack !== "gta6") {
     // Fil varié : toutes les catégories de la page Explorer, pour avoir de tout comme sur TikTok.
     runState.step = "fil varié (Explorer)";
     try {
