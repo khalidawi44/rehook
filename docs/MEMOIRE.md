@@ -64,6 +64,7 @@ Côté Fabrice :
 5. Créer le compte Postiz et y connecter les chaînes.
 
 Côté code :
+0. **Priorité du 18/11/2026 (demande de Fabrice)** : régler la découverte des vidéos GTA 6, les comptes suivis ne ramènent rien. Commencer par les lignes « navigateur : » de `E:\REHOOK\data\rehook.log`. Fabrice ne veut pas d'Apify pour l'instant. Autre piste qu'il évoque : des comptes déjà configurés (à lui faire préciser).
 1. Vérifier chez Fabrice que la chaîne GTA 6 ne montre plus d'humour après la mise à jour 3faa6a7.
 2. Page d'accueil publique du produit (promesse, captures, liste d'attente).
 3. Version hébergée multi-utilisateurs, paiement, paliers (feuille de route dans `docs/produit.md`).
