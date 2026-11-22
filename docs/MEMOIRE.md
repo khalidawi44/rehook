@@ -55,7 +55,7 @@ Dernière mise à jour : 17 novembre 2026.
 
 - 22/11/2026 : Fabrice confirme que le compte TikTok GTA 6 sera centré sur les **lives**. Bio TikTok proposée (80 caractères max) : « 🔴 Lives GTA 6 tous les soirs à 21 h. Leonida en français. Chaîne de fan. » (heure à ajuster par Fabrice). GTA 6 est sorti le 19/11 : ne plus écrire « sortie le 19 novembre » au futur.
 
-- 22/11/2026 : Fabrice précise que ses **lives se font sur Discord**, pas sur Twitch. Photo de profil TikTok posée. Le lien de la bio TikTok doit pointer vers le serveur Discord (invitation permanente).
+- 22/11/2026 : Fabrice précise que ses **lives se font sur Discord**, pas sur Twitch. Photo de profil TikTok posée. Le lien de la bio TikTok doit pointer vers le serveur Discord (invitation permanente). Serveur Discord de Fabrice : https://discord.gg/4ZQquVXnY (donné le 22/11/2026, validité et expiration non vérifiées).
 
 ## 6. À faire
 
