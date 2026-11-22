@@ -53,6 +53,8 @@ Dernière mise à jour : 17 novembre 2026.
 - 18/11/2026 : la chaîne GTA 6 ne contenait que des vidéos du fil varié (sans rapport). Le fil varié est coupé pour cette chaîne et ces vidéos sont retirées. Les comptes suivis ne ramènent toujours rien chez Fabrice : cause non établie, impossible à reproduire dans l'environnement de développement (les tests contre TikTok y sont bloqués). Pistes : journal `E:\REHOOK\data\rehook.log`, ou le fournisseur de données Apify (`NICHE_DISCOVERY=apify` et jeton dans `.env`), déjà géré par le code.
 - 18/11/2026 : Fabrice veut garder le montage de Rehook pour finir une vidéo (logos, sous-titres, textes) : dans Planning, un fichier importé peut s'ouvrir dans le montage ou être publié tel quel.
 
+- 22/11/2026 : Fabrice confirme que le compte TikTok GTA 6 sera centré sur les **lives**. Bio TikTok proposée (80 caractères max) : « 🔴 Lives GTA 6 tous les soirs à 21 h. Leonida en français. Chaîne de fan. » (heure à ajuster par Fabrice). GTA 6 est sorti le 19/11 : ne plus écrire « sortie le 19 novembre » au futur.
+
 ## 6. À faire
 
 Côté Fabrice :
